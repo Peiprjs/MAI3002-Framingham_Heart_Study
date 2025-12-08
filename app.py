@@ -161,30 +161,33 @@ elif selected == 'Exploratory Data Analysis':
         st.plotly_chart(fig_corr, use_container_width=True)
 
         st.subheader("Pairplot Analysis")
-        fig = make_subplots(rows=len(available_vars), cols=len(available_vars),
-                            subplot_titles=[f"{v1} vs {v2}" for v1 in available_vars for v2 in available_vars])
 
-        for i, var1 in enumerate(available_vars, 1):
-            for j, var2 in enumerate(available_vars, 1):
-                if var1 == var2:
-                    # Histogram on diagonal
-                    fig.add_trace(
-                        go.Histogram(x=data_imputed[var1], name=var1),
-                        row=i, col=j
-                    )
-                else:
-                    # Scatter plot off diagonal
-                    fig.add_trace(
-                        go.Scatter(x=data_imputed[var2], y=data_imputed[var1],
-                                   mode='markers', marker=dict(size=3),
-                                   name=f"{var1} vs {var2}"),
-                        row=i, col=j
-                    )
+        @st.cache_data(persist="disk", show_spinner=True)
+        def subplots(available_vars):
+            fig = make_subplots(rows=len(available_vars), cols=len(available_vars),
+                                subplot_titles=[f"{v1} vs {v2}" for v1 in available_vars for v2 in available_vars])
 
-        fig.update_layout(height=200 * len(available_vars), showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
+            for i, var1 in enumerate(available_vars, 1):
+                for j, var2 in enumerate(available_vars, 1):
+                    if var1 == var2:
+                        # Histogram on diagonal
+                        fig.add_trace(
+                            go.Histogram(x=data_imputed[var1], name=var1),
+                            row=i, col=j
+                        )
+                    else:
+                        # Scatter plot off diagonal
+                        fig.add_trace(
+                            go.Scatter(x=data_imputed[var2], y=data_imputed[var1],
+                                       mode='markers', marker=dict(size=3),
+                                       name=f"{var1} vs {var2}"),
+                            row=i, col=j
+                        )
 
+            fig.update_layout(height=200 * len(available_vars), showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
 
+        subplots(available_vars)
 
 # Statistical Analysis Section
 elif selected == 'Statistical Analysis':
