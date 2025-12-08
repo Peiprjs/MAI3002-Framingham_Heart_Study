@@ -11,6 +11,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score, confusion_matrix
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import f1_score
+import seaborn as sns
 import warnings
 
 from imputation_functions import drop_high_missing_cols, knn_impute, impute_simple_central
@@ -96,36 +97,39 @@ if selected == 'Abstract':
 # Data Overview Section
 elif selected == 'Exploratory Data Analysis':
     st.title("Exploratory Data Analysis")
-    
+
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Total Participants", f"{data_raw.shape[0]:,}")
     with col2:
         st.metric("Total Features", data_raw.shape[1])
-    
+
+    data_type = st.segmented_control("Select data type", ["Raw Data", "Imputed Data"])
+    data_to_use = data_raw if data_type == "Raw Data" else data_imputed
+
     st.subheader("Dataset Statistics")
-    st.dataframe(data_raw.describe())
-    
+    st.dataframe(data_to_use.describe())
+
     st.subheader("Data Distribution")
-    
+
     # Select numeric columns for visualization
-    numeric_cols = data_raw.select_dtypes(include=['number']).columns.tolist()
+    numeric_cols = data_to_use.select_dtypes(include=['number']).columns.tolist()
     selected_col = st.selectbox("Select a variable to visualize", numeric_cols)
-    
+
     # Create histogram
 
     # Create histogram with KDE
     fig = go.Figure()
 
     # Add histogram
-    fig.add_trace(go.Histogram(x=data_raw[selected_col], nbinsx=30, name='Histogram'))
+    fig.add_trace(go.Histogram(x=data_to_use[selected_col], nbinsx=30, name='Histogram'))
 
     # Add KDE
-    kde_x = np.linspace(data_raw[selected_col].min(), data_raw[selected_col].max(), 100)
-    kde = stats.gaussian_kde(data_raw[selected_col].dropna())
+    kde_x = np.linspace(data_to_use[selected_col].min(), data_to_use[selected_col].max(), 100)
+    kde = stats.gaussian_kde(data_to_use[selected_col].dropna())
     kde_y = kde(kde_x)
-    fig.add_trace(go.Scatter(x=kde_x, y=kde_y * len(data_raw[selected_col]) * (
-                data_raw[selected_col].max() - data_raw[selected_col].min()) / 30,
+    fig.add_trace(go.Scatter(x=kde_x, y=kde_y * len(data_to_use[selected_col]) * (
+            data_to_use[selected_col].max() - data_to_use[selected_col].min()) / 30,
                              mode='lines', name='KDE', line=dict(color='red')))
 
     fig.update_layout(title=f'Distribution of {selected_col}',
@@ -134,7 +138,7 @@ elif selected == 'Exploratory Data Analysis':
                       showlegend=False,
                       height=400)
     st.plotly_chart(fig, use_container_width=True)
-    
+
     # Correlation heatmap
     st.subheader("Correlation Analysis")
     all_vars = data_imputed.select_dtypes(include=['float64', 'int64']).columns.tolist()
@@ -157,6 +161,31 @@ elif selected == 'Exploratory Data Analysis':
                              title=f'Correlation Matrix of {var_type}')
         fig_corr.update_layout(height=500)
         st.plotly_chart(fig_corr, use_container_width=True)
+
+        st.subheader("Pairplot Analysis")
+        fig = make_subplots(rows=len(available_vars), cols=len(available_vars),
+                            subplot_titles=[f"{v1} vs {v2}" for v1 in available_vars for v2 in available_vars])
+
+        for i, var1 in enumerate(available_vars, 1):
+            for j, var2 in enumerate(available_vars, 1):
+                if var1 == var2:
+                    # Histogram on diagonal
+                    fig.add_trace(
+                        go.Histogram(x=data_imputed[var1], name=var1),
+                        row=i, col=j
+                    )
+                else:
+                    # Scatter plot off diagonal
+                    fig.add_trace(
+                        go.Scatter(x=data_imputed[var2], y=data_imputed[var1],
+                                   mode='markers', marker=dict(size=3),
+                                   name=f"{var1} vs {var2}"),
+                        row=i, col=j
+                    )
+
+        fig.update_layout(height=200 * len(available_vars), showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
+
 
 
 # Statistical Analysis Section
