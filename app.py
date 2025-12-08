@@ -1,0 +1,405 @@
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import streamlit as st
+from streamlit_option_menu import option_menu
+from scipy import stats
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import f1_score
+import warnings
+
+from imputation_functions import drop_high_missing_cols, knn_impute, impute_simple_central
+from functions import distplots
+
+st.set_page_config(layout="wide", page_title="Framingham Heart Study")
+
+warnings.filterwarnings('ignore')
+
+# Load data
+@st.cache_data
+def load_data():
+    """Load and cache the dataset"""
+    DatasetURL = "https://raw.githubusercontent.com/LUCE-Blockchain/Databases-for-teaching/refs/heads/main/Framingham%20Dataset.csv"
+    try:
+        data = pd.read_csv(DatasetURL)
+    except (Exception) as e:
+        # Fallback to local file if URL fails
+        try:
+            data = pd.read_csv("Framingham Dataset.csv")
+        except FileNotFoundError:
+            st.error("Dataset not found. Please ensure the data file is available.")
+            raise
+    return data
+
+@st.cache_data
+def preprocess_data(data):
+    """Preprocess data with imputation"""
+    # Identify binary columns and time columns
+    binary_cols = ['SEX', 'CURSMOKE', 'DIABETES', 'BPMEDS', 'PREVCHD', 'PREVAP', 
+                   'PREVMI', 'PREVSTRK', 'PREVHYP', 'ANYCHD', 'ANGINA', 
+                   'HOSPMI', 'MI_FCHD', 'DEATH', 'STROKE', 'CVD', 'HYPERTEN']
+    time_cols = [col for col in data.columns if col.startswith('TIME')]
+    
+    # Suppress imputation function output to avoid cluttering the UI
+    import sys
+    from io import StringIO
+    old_stdout = sys.stdout
+    sys.stdout = StringIO()
+    
+    try:
+        # Drop high missing columns
+        data_dropped = drop_high_missing_cols(data, threshold=0.50)
+        
+        # KNN imputation
+        data_knn = knn_impute(data_dropped, min_thresh=0.02, max_thresh=0.50, n_neighbors=5)
+        
+        # Simple imputation
+        data_imputed = impute_simple_central(data_knn)
+    finally:
+        # Restore stdout
+        sys.stdout = old_stdout
+    
+    return data_imputed, binary_cols, time_cols
+
+# Load data
+data_raw = load_data()
+data_imputed, binary_cols, time_cols = preprocess_data(data_raw)
+
+# Sidebar navigation
+with st.sidebar:
+    selected = option_menu(
+        menu_title='Navigation',
+        options=['Abstract', 'Exploratory Data Analysis', 'Statistical Analysis', 'Machine Learning Results', 'Conclusion'],
+        menu_icon='heart-pulse',
+        icons=['bookmark-check', 'bar-chart', 'calculator', 'cpu', 'check2-circle'],
+        default_index=0,
+    )
+
+# Abstract Section
+if selected == 'Abstract':
+    st.title("Framingham Heart Study Analysis")
+    st.markdown("""
+    ## Abstract
+        
+    Navigate through the sections using the sidebar to explore the detailed analysis.
+    """.format(data_raw.shape[0], data_raw.shape[1]))
+    
+    # Display basic statistics
+    st.subheader("Dataset Preview")
+    st.dataframe(data_raw.head(10))
+
+# Data Overview Section
+elif selected == 'Exploratory Data Analysis':
+    st.title("Exploratory Data Analysis")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Participants", f"{data_raw.shape[0]:,}")
+    with col2:
+        st.metric("Total Features", data_raw.shape[1])
+    
+    st.subheader("Dataset Statistics")
+    st.dataframe(data_raw.describe())
+    
+    st.subheader("Data Distribution")
+    
+    # Select numeric columns for visualization
+    numeric_cols = data_raw.select_dtypes(include=['number']).columns.tolist()
+    selected_col = st.selectbox("Select a variable to visualize", numeric_cols)
+    
+    # Create histogram
+
+    # Create histogram with KDE
+    fig = go.Figure()
+
+    # Add histogram
+    fig.add_trace(go.Histogram(x=data_raw[selected_col], nbinsx=30, name='Histogram'))
+
+    # Add KDE
+    kde_x = np.linspace(data_raw[selected_col].min(), data_raw[selected_col].max(), 100)
+    kde = stats.gaussian_kde(data_raw[selected_col].dropna())
+    kde_y = kde(kde_x)
+    fig.add_trace(go.Scatter(x=kde_x, y=kde_y * len(data_raw[selected_col]) * (
+                data_raw[selected_col].max() - data_raw[selected_col].min()) / 30,
+                             mode='lines', name='KDE', line=dict(color='red')))
+
+    fig.update_layout(title=f'Distribution of {selected_col}',
+                      xaxis_title=selected_col,
+                      template='plotly_white',
+                      showlegend=False,
+                      height=400)
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Correlation heatmap
+    st.subheader("Correlation Analysis")
+    all_vars = data_imputed.select_dtypes(include=['float64', 'int64']).columns.tolist()
+    key_vars = ['AGE', 'TOTCHOL', 'SYSBP', 'DIABP', 'BMI', 'HEARTRATE', 'GLUCOSE']
+
+    options = ["Key Variables", "All Variables"]
+    var_type = st.segmented_control(
+        "Select variables to analyze", options, selection_mode="single"
+    )
+    selected_vars = key_vars if var_type == "Key Variables" else all_vars
+    available_vars = [var for var in selected_vars if var in data_imputed.columns]
+
+    if len(available_vars) > 1:
+        corr_matrix = data_imputed[available_vars].corr()
+
+        fig_corr = px.imshow(corr_matrix,
+                             text_auto='.2f',
+                             aspect="auto",
+                             color_continuous_scale='RdBu_r',
+                             title=f'Correlation Matrix of {var_type}')
+        fig_corr.update_layout(height=500)
+        st.plotly_chart(fig_corr, use_container_width=True)
+
+
+# Statistical Analysis Section
+elif selected == 'Statistical Analysis':
+    st.title("Statistical Analysis")
+    
+    st.markdown("""
+    This section presents the statistical analysis results for the key research questions 
+    about cardiovascular disease risk factors.
+    """)
+    
+    # Research Question 1: Cholesterol and Smoking
+    st.header("1. Total Cholesterol: Smokers vs Non-Smokers")
+    
+    col1, col2 = st.columns([2, 3])
+    
+    with col1:
+        # Calculate statistics
+        mean_cholesterol = data_imputed.groupby('CURSMOKE')['TOTCHOL'].describe()
+        st.dataframe(mean_cholesterol)
+        
+        # Perform t-test
+        nonsmokers_chol = data_imputed[data_imputed['CURSMOKE'] == 0]['TOTCHOL']
+        smokers_chol = data_imputed[data_imputed['CURSMOKE'] == 1]['TOTCHOL']
+        levene_stat, levene_p = stats.levene(nonsmokers_chol, smokers_chol)
+        
+        t_stat, p_value = stats.ttest_ind(smokers_chol, nonsmokers_chol,
+                                          equal_var=False if levene_p < 0.05 else True)
+        
+        st.metric("T-statistic", f"{t_stat:.4f}")
+        st.metric("P-value", f"{p_value:.4f}")
+        
+        if p_value < 0.05:
+            st.success("The difference in mean total cholesterol is statistically significant.")
+        else:
+            st.info("No statistically significant difference in mean total cholesterol.")
+    
+    with col2:
+        # Visualization
+        fig = px.box(data_imputed, x='CURSMOKE', y='TOTCHOL',
+                    labels={'CURSMOKE': 'Smoking Status', 'TOTCHOL': 'Total Cholesterol'},
+                    title='Total Cholesterol by Smoking Status')
+        fig.update_xaxes(ticktext=['Non-Smoker', 'Smoker'], tickvals=[0, 1])
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # Research Question 2: Blood Pressure and Smoking
+    st.header("2. Blood Pressure: Smokers vs Non-Smokers")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Systolic Blood Pressure")
+        nonsmokers_sys = data_imputed[data_imputed['CURSMOKE'] == 0]['SYSBP']
+        smokers_sys = data_imputed[data_imputed['CURSMOKE'] == 1]['SYSBP']
+        
+        t_stat_sys, p_value_sys = stats.ttest_ind(nonsmokers_sys, smokers_sys)
+        
+        fig_sys = px.box(data_imputed, x='CURSMOKE', y='SYSBP',
+                        labels={'CURSMOKE': 'Smoking Status', 'SYSBP': 'Systolic BP (mmHg)'},
+                        title='Systolic Blood Pressure by Smoking Status')
+        fig_sys.update_xaxes(ticktext=['Non-Smoker', 'Smoker'], tickvals=[0, 1])
+        st.plotly_chart(fig_sys, use_container_width=True)
+        
+        if p_value_sys < 0.05:
+            st.success(f"Significant difference (p={p_value_sys:.4f})")
+        else:
+            st.info(f"No significant difference (p={p_value_sys:.4f})")
+    
+    with col2:
+        st.subheader("Diastolic Blood Pressure")
+        nonsmokers_dias = data_imputed[data_imputed['CURSMOKE'] == 0]['DIABP']
+        smokers_dias = data_imputed[data_imputed['CURSMOKE'] == 1]['DIABP']
+        
+        t_stat_dias, p_value_dias = stats.ttest_ind(nonsmokers_dias, smokers_dias)
+        
+        fig_dias = px.box(data_imputed, x='CURSMOKE', y='DIABP',
+                         labels={'CURSMOKE': 'Smoking Status', 'DIABP': 'Diastolic BP (mmHg)'},
+                         title='Diastolic Blood Pressure by Smoking Status')
+        fig_dias.update_xaxes(ticktext=['Non-Smoker', 'Smoker'], tickvals=[0, 1])
+        st.plotly_chart(fig_dias, use_container_width=True)
+        
+        if p_value_dias < 0.05:
+            st.success(f"Significant difference (p={p_value_dias:.4f})")
+        else:
+            st.info(f"No significant difference (p={p_value_dias:.4f})")
+    
+    # Research Question 3: Age and CVD in Smokers vs Non-Smokers
+    st.header("3. Age Analysis: CVD Patients by Smoking Status")
+    
+    patients_with_cvd = data_imputed[data_imputed['CVD'] == 1].copy()
+    
+    if not patients_with_cvd.empty:
+        col1, col2 = st.columns([2, 3])
+        
+        with col1:
+            age_stats = patients_with_cvd.groupby('CURSMOKE')['AGE'].describe()
+            st.dataframe(age_stats)
+            
+            smokers_age_cvd = patients_with_cvd[patients_with_cvd['CURSMOKE'] == 1]['AGE']
+            nonsmokers_age_cvd = patients_with_cvd[patients_with_cvd['CURSMOKE'] == 0]['AGE']
+            
+            t_stat_age, p_value_age = stats.ttest_ind(smokers_age_cvd, nonsmokers_age_cvd)
+            
+            st.metric("T-statistic", f"{t_stat_age:.4f}")
+            st.metric("P-value", f"{p_value_age:.4f}")
+            
+            if p_value_age < 0.05:
+                st.success("Significant age difference between smokers and non-smokers with CVD.")
+            else:
+                st.info("No significant age difference between smokers and non-smokers with CVD.")
+        
+        with col2:
+            fig_age = px.box(patients_with_cvd, x='CURSMOKE', y='AGE',
+                            labels={'CURSMOKE': 'Smoking Status', 'AGE': 'Age (years)'},
+                            title='Age of CVD Patients by Smoking Status')
+            fig_age.update_xaxes(ticktext=['Non-Smoker', 'Smoker'], tickvals=[0, 1])
+            st.plotly_chart(fig_age, use_container_width=True)
+
+# Machine Learning Results Section
+elif selected == 'Machine Learning Results':
+    st.title("Machine Learning Results")
+    
+    st.markdown("""
+    This section presents the results of machine learning models trained to predict 
+    cardiovascular disease outcomes.
+    """)
+    
+    # Prepare data for ML
+    # Select features
+    feature_cols = ['SEX', 'TOTCHOL', 'AGE', 'SYSBP', 'DIABP', 'CURSMOKE', 'CIGPDAY', 
+                   'BMI', 'DIABETES', 'BPMEDS', 'GLUCOSE', 'HEARTRATE']
+    available_features = [col for col in feature_cols if col in data_imputed.columns]
+    
+    if 'ANYCHD' in data_imputed.columns and len(available_features) > 0:
+        X = data_imputed[available_features].dropna()
+        y = data_imputed.loc[X.index, 'ANYCHD']
+        
+        # Split data
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20, 
+                                                            stratify=y, random_state=2025)
+        
+        # Logistic Regression
+        st.header("1. Logistic Regression Model")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            lr_model = LogisticRegression(max_iter=1000, random_state=2025)
+            lr_model.fit(X_train, y_train)
+            y_pred_lr = lr_model.predict(X_test)
+            
+            accuracy_lr = accuracy_score(y_test, y_pred_lr)
+            f1_lr = f1_score(y_test, y_pred_lr)
+            
+            st.metric("Accuracy", f"{accuracy_lr:.4f}")
+            st.metric("F1 Score", f"{f1_lr:.4f}")
+            
+            # Feature importance
+            feature_importance = pd.DataFrame({
+                'Feature': available_features,
+                'Coefficient': lr_model.coef_[0]
+            }).sort_values('Coefficient', ascending=False)
+            
+            st.subheader("Top Features")
+            st.dataframe(feature_importance.head(10))
+        
+        with col2:
+            # Confusion matrix
+            cm_lr = confusion_matrix(y_test, y_pred_lr)
+            
+            fig_cm = px.imshow(cm_lr, 
+                              text_auto=True,
+                              labels=dict(x="Predicted", y="Actual"),
+                              x=['No CHD', 'CHD'],
+                              y=['No CHD', 'CHD'],
+                              title='Confusion Matrix - Logistic Regression',
+                              color_continuous_scale='Blues')
+            st.plotly_chart(fig_cm, use_container_width=True)
+        
+        # Decision Tree
+        st.header("2. Decision Tree Classifier")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            dt_model = DecisionTreeClassifier(criterion='entropy', random_state=2025, 
+                                             class_weight='balanced', max_depth=5)
+            dt_model.fit(X_train, y_train)
+            y_pred_dt = dt_model.predict(X_test)
+            
+            accuracy_dt = accuracy_score(y_test, y_pred_dt)
+            
+            st.metric("Accuracy", f"{accuracy_dt:.4f}")
+            
+            # Feature importance
+            feature_importance_dt = pd.DataFrame({
+                'Feature': available_features,
+                'Importance': dt_model.feature_importances_
+            }).sort_values('Importance', ascending=False)
+            
+            st.subheader("Feature Importance")
+            fig_importance = px.bar(feature_importance_dt.head(10), 
+                                   x='Importance', y='Feature',
+                                   orientation='h',
+                                   title='Top 10 Important Features')
+            st.plotly_chart(fig_importance, use_container_width=True)
+        
+        with col2:
+            # Confusion matrix
+            cm_dt = confusion_matrix(y_test, y_pred_dt)
+            
+            fig_cm_dt = px.imshow(cm_dt, 
+                                 text_auto=True,
+                                 labels=dict(x="Predicted", y="Actual"),
+                                 x=['No CHD', 'CHD'],
+                                 y=['No CHD', 'CHD'],
+                                 title='Confusion Matrix - Decision Tree',
+                                 color_continuous_scale='Greens')
+            st.plotly_chart(fig_cm_dt, use_container_width=True)
+        
+        # Model Comparison
+        st.header("3. Model Comparison")
+        
+        comparison_df = pd.DataFrame({
+            'Model': ['Logistic Regression', 'Decision Tree'],
+            'Accuracy': [accuracy_lr, accuracy_dt],
+            'F1 Score': [f1_lr, f1_score(y_test, y_pred_dt)]
+        })
+        
+        fig_comparison = px.bar(comparison_df, x='Model', y=['Accuracy', 'F1 Score'],
+                               barmode='group',
+                               title='Model Performance Comparison',
+                               labels={'value': 'Score', 'variable': 'Metric'})
+        st.plotly_chart(fig_comparison, use_container_width=True)
+    else:
+        st.warning("Required features not available in the dataset for machine learning analysis.")
+
+# Conclusion Section
+elif selected == 'Conclusion':
+    st.title("Conclusion")
+    
+    st.markdown("""
+    ## Conclusions
+    """)
+    
+    st.info("Navigate through the different sections using the sidebar to explore detailed analysis and visualizations.")
