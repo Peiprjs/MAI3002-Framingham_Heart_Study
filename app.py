@@ -104,7 +104,7 @@ elif selected == 'Exploratory Data Analysis':
     with col2:
         st.metric("Total Features", data_raw.shape[1])
 
-    data_type = st.segmented_control("Select data type", ["Raw Data", "Imputed Data"])
+    data_type = st.segmented_control("Select data type", ["Raw Data", "Imputed Data"], default = "Imputed Data")
     data_to_use = data_raw if data_type == "Raw Data" else data_imputed
 
     st.subheader("Dataset Statistics")
@@ -145,9 +145,7 @@ elif selected == 'Exploratory Data Analysis':
     key_vars = ['AGE', 'TOTCHOL', 'SYSBP', 'DIABP', 'BMI', 'HEARTRATE', 'GLUCOSE']
 
     options = ["Key Variables", "All Variables"]
-    var_type = st.segmented_control(
-        "Select variables to analyze", options, selection_mode="single"
-    )
+    var_type = st.segmented_control("Select variables to analyze", options, selection_mode="single", default = "Key Variables")
     selected_vars = key_vars if var_type == "Key Variables" else all_vars
     available_vars = [var for var in selected_vars if var in data_imputed.columns]
 
