@@ -163,7 +163,7 @@ elif selected == 'Exploratory Data Analysis':
 
         st.subheader("Pairplot Analysis")
 
-        @st.cache_resource(show_spinner=True, show_time=True, experimental_allow_widgets=True)
+        @st.cache_resource(show_spinner=True, show_time=True)
         def pairplots(available_vars):
             fig = make_subplots(rows=len(available_vars), cols=len(available_vars),
                                 subplot_titles=[f"{v1} vs {v2}" for v1 in available_vars for v2 in available_vars])
@@ -186,14 +186,14 @@ elif selected == 'Exploratory Data Analysis':
                         )
 
             fig.update_layout(height=200 * len(available_vars), showlegend=False)
-            st.plotly_chart(fig, use_container_width=True)
+            return(fig)
 
         options = ["Pretty", "Resource-friendly"]
         efficiency = st.segmented_control("How should the data be displayed?", options, selection_mode="single",
                                         default="Resource-friendly")
         if efficiency == "Pretty":
             st.success("oh gods!")
-            pairplots(available_vars)
+            st.plotly_chart(pairplots(available_vars), use_container_width=True)
         else:
             fig = plt.figure(figsize=(10, 10))
             sns.pairplot(data_imputed[available_vars])
