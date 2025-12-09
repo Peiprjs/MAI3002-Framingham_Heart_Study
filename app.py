@@ -186,7 +186,7 @@ elif selected == 'Exploratory Data Analysis':
                         )
 
             fig.update_layout(height=200 * len(available_vars), showlegend=False)
-            return(fig)
+            return fig
 
         options = ["Pretty", "Resource-friendly"]
         efficiency = st.segmented_control("How should the data be displayed?", options, selection_mode="single",
@@ -195,8 +195,11 @@ elif selected == 'Exploratory Data Analysis':
             st.success("oh gods!")
             st.plotly_chart(pairplots(available_vars), use_container_width=True)
         else:
-            fig = sns.pairplot(data_to_use[available_vars])
-            st.pyplot(fig)
+            @st.cache_resource
+            def pairplots_eco(data):
+                fig = sns.pairplot(data)
+                return fig
+            st.pyplot(pairplots_eco(data_to_use[available_vars]))
 
 
 # Statistical Analysis Section
