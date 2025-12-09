@@ -13,6 +13,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import f1_score
 import seaborn as sns
 import warnings
+import matplotlib.pyplot as plt
 
 from imputation_functions import drop_high_missing_cols, knn_impute, impute_simple_central
 from functions import distplots
