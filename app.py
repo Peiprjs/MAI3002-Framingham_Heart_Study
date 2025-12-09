@@ -162,7 +162,7 @@ elif selected == 'Exploratory Data Analysis':
 
         st.subheader("Pairplot Analysis")
 
-        @st.cache_resource(persist="disk", show_spinner=True)
+        @st.cache_resource(show_spinner=True)
         def subplots(available_vars):
             fig = make_subplots(rows=len(available_vars), cols=len(available_vars),
                                 subplot_titles=[f"{v1} vs {v2}" for v1 in available_vars for v2 in available_vars])
