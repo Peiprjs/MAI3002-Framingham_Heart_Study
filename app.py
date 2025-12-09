@@ -195,7 +195,7 @@ elif selected == 'Exploratory Data Analysis':
             st.success("oh gods!")
             st.plotly_chart(pairplots(available_vars), use_container_width=True)
         else:
-            @st.cache_resource
+            @st.cache_resource(show_spinner=True, show_time=True)
             def pairplots_eco(data):
                 fig = sns.pairplot(data)
                 return fig
