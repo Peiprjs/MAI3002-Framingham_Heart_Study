@@ -162,43 +162,45 @@ elif selected == 'Exploratory Data Analysis':
         st.plotly_chart(fig_corr, use_container_width=True)
 
         st.subheader("Pairplot Analysis")
-
-        @st.cache_resource(show_spinner=True, show_time=True)
-        def pairplots(available_vars):
-            fig = make_subplots(rows=len(available_vars), cols=len(available_vars),
-                                subplot_titles=[f"{v1} vs {v2}" for v1 in available_vars for v2 in available_vars])
-
-            for i, var1 in enumerate(available_vars, 1):
-                for j, var2 in enumerate(available_vars, 1):
-                    if var1 == var2:
-                        # Histogram on diagonal
-                        fig.add_trace(
-                            go.Histogram(x=data_to_use[var1], name=var1),
-                            row=i, col=j
-                        )
-                    else:
-                        # Scatter plot off diagonal
-                        fig.add_trace(
-                            go.Scatter(x=data_to_use[var2], y=data_to_use[var1],
-                                       mode='markers', marker=dict(size=3),
-                                       name=f"{var1} vs {var2}"),
-                            row=i, col=j
-                        )
-
-            fig.update_layout(height=200 * len(available_vars), showlegend=False)
-            return fig
+        st.warning("Due to memory constraints, only Key Variables can be shown.")
 
         options = ["Pretty", "Resource-friendly"]
         efficiency = st.segmented_control("How should the data be displayed?", options, selection_mode="single",
                                         default="Resource-friendly")
         if efficiency == "Pretty":
-            st.success("oh gods!")
-            st.plotly_chart(pairplots(available_vars), use_container_width=True)
+            st.warning("Will take a long time to run")
+            @st.cache_resource(show_spinner=True, show_time=True)
+            def pairplots(available_vars):
+                fig = make_subplots(rows=len(available_vars), cols=len(available_vars),
+                                    subplot_titles=[f"{v1} vs {v2}" for v1 in available_vars for v2 in available_vars])
+
+                for i, var1 in enumerate(available_vars, 1):
+                    for j, var2 in enumerate(available_vars, 1):
+                        if var1 == var2:
+                            # Histogram on diagonal
+                            fig.add_trace(
+                                go.Histogram(x=data_to_use[var1], name=var1),
+                                row=i, col=j
+                            )
+                        else:
+                            # Scatter plot off diagonal
+                            fig.add_trace(
+                                go.Scatter(x=data_to_use[var2], y=data_to_use[var1],
+                                           mode='markers', marker=dict(size=3),
+                                           name=f"{var1} vs {var2}"),
+                                row=i, col=j
+                            )
+
+                fig.update_layout(height=200 * len(available_vars), showlegend=False)
+                return fig
+            st.plotly_chart(pairplots(key_vars), use_container_width=True)
         else:
             @st.cache_resource(show_spinner=True, show_time=True)
             def pairplots_eco(data):
-                fig = sns.pairplot(data)
+                fig = sns.pairplot(data, hue="CVD")
                 return fig
+            selected_vars = key_vars
+            available_vars = [var for var in selected_vars if var in data_imputed.columns]
             st.pyplot(pairplots_eco(data_to_use[available_vars]))
 
 
