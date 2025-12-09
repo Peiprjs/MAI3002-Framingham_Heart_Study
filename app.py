@@ -173,13 +173,13 @@ elif selected == 'Exploratory Data Analysis':
                     if var1 == var2:
                         # Histogram on diagonal
                         fig.add_trace(
-                            go.Histogram(x=data_imputed[var1], name=var1),
+                            go.Histogram(x=data_to_use[var1], name=var1),
                             row=i, col=j
                         )
                     else:
                         # Scatter plot off diagonal
                         fig.add_trace(
-                            go.Scatter(x=data_imputed[var2], y=data_imputed[var1],
+                            go.Scatter(x=data_to_use[var2], y=data_to_use[var1],
                                        mode='markers', marker=dict(size=3),
                                        name=f"{var1} vs {var2}"),
                             row=i, col=j
@@ -195,8 +195,7 @@ elif selected == 'Exploratory Data Analysis':
             st.success("oh gods!")
             st.plotly_chart(pairplots(available_vars), use_container_width=True)
         else:
-            fig = plt.figure(figsize=(10, 10))
-            sns.pairplot(data_imputed[available_vars])
+            fig = sns.pairplot(data_to_use[available_vars])
             st.pyplot(fig)
 
 
