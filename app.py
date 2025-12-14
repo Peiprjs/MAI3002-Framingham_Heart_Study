@@ -8,9 +8,9 @@ from streamlit_option_menu import option_menu
 from scipy import stats
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import f1_score
 from sklearn.feature_selection import RFE
 import seaborn as sns
 import warnings
@@ -77,9 +77,9 @@ data_imputed, binary_cols, time_cols = preprocess_data(data_raw)
 with st.sidebar:
     selected = option_menu(
         menu_title='Navigation',
-        options=['Abstract', 'Exploratory Data Analysis', 'Statistical Analysis', 'Machine Learning Results', 'Conclusion'],
+        options=['Abstract', 'Data Preprocessing', 'Exploratory Data Analysis', 'Statistical Analysis', 'Machine Learning Results', 'Conclusion'],
         menu_icon='heart-pulse',
-        icons=['bookmark-check', 'bar-chart', 'calculator', 'cpu', 'check2-circle'],
+        icons=['bookmark-check', 'wrench', 'bar-chart', 'calculator', 'cpu', 'check2-circle'],
         default_index=0,
     )
 
@@ -95,6 +95,497 @@ if selected == 'Abstract':
     # Display basic statistics
     st.subheader("Dataset Preview")
     st.dataframe(data_raw.head(10))
+
+# Data Preprocessing Section
+elif selected == 'Data Preprocessing':
+    st.title("Data Preprocessing")
+    
+    st.markdown("""
+    This section describes the comprehensive data preprocessing pipeline applied to prepare 
+    the Framingham Heart Study dataset for analysis and machine learning.
+    """)
+    
+    # Missing Data Analysis
+    st.header("1. Missing Data Analysis")
+    
+    st.markdown("""
+    The first step in preprocessing is to understand and handle missing data. The dataset 
+    contains various levels of missingness across different features.
+    """)
+    
+    col1, col2 = st.columns([3, 2])
+    
+    with col1:
+        # Calculate missing percentages
+        missing_pct = (data_raw.isnull().sum() / len(data_raw) * 100).sort_values(ascending=False)
+        missing_df = pd.DataFrame({
+            'Column': missing_pct.index,
+            'Missing Percentage': missing_pct.values
+        })
+        missing_df = missing_df[missing_df['Missing Percentage'] > 0]
+        
+        if not missing_df.empty:
+            fig_missing = px.bar(missing_df, 
+                               x='Missing Percentage', 
+                               y='Column',
+                               orientation='h',
+                               title='Missing Data by Feature',
+                               labels={'Missing Percentage': 'Missing (%)'})
+            fig_missing.update_layout(height=400)
+            st.plotly_chart(fig_missing, use_container_width=True)
+        else:
+            st.info("No missing data detected in the dataset.")
+    
+    with col2:
+        st.subheader("Missing Data Strategy")
+        st.markdown("""
+        **Three-tier approach:**
+        
+        1. **Drop columns** with >50% missing data
+        2. **KNN Imputation** for 2-50% missing data
+        3. **Simple Imputation** (median/mode) for <2% missing data
+        """)
+        
+        if not missing_df.empty:
+            high_missing = missing_df[missing_df['Missing Percentage'] > 50]
+            moderate_missing = missing_df[(missing_df['Missing Percentage'] >= 2) & 
+                                         (missing_df['Missing Percentage'] <= 50)]
+            low_missing = missing_df[missing_df['Missing Percentage'] < 2]
+            
+            st.metric("Columns Dropped (>50%)", len(high_missing))
+            st.metric("KNN Imputed (2-50%)", len(moderate_missing))
+            st.metric("Simple Imputed (<2%)", len(low_missing))
+    
+    # Column Dropping
+    st.header("2. Dropping High-Missing Columns")
+    
+    st.markdown("""
+    Columns with more than 50% missing values are removed from the dataset as they 
+    provide insufficient information for reliable analysis or imputation.
+    """)
+    
+    high_missing_cols = missing_pct[missing_pct > 50].index.tolist()
+    if high_missing_cols:
+        st.warning(f"**Columns dropped:** {', '.join(high_missing_cols)}")
+        st.code(f"Threshold: 50% missing\nColumns affected: {len(high_missing_cols)}")
+    else:
+        st.success("No columns exceeded the 50% missing threshold.")
+    
+    # KNN Imputation
+    st.header("3. KNN Imputation")
+    
+    st.markdown("""
+    For columns with moderate missingness (2-50%), K-Nearest Neighbors (KNN) imputation 
+    is used. This method predicts missing values based on similar observations.
+    """)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("How KNN Imputation Works")
+        st.markdown("""
+        1. **One-hot encode** categorical variables
+        2. For each column with missing data:
+           - Use complete cases as training data
+           - Find k=5 nearest neighbors
+           - Predict missing values using:
+             - **KNN Regressor** for continuous variables
+             - **KNN Classifier** for binary variables
+        3. **Reconstruct** original data format
+        """)
+    
+    with col2:
+        knn_impute_cols = missing_pct[(missing_pct >= 2) & (missing_pct <= 50)].index.tolist()
+        knn_impute_cols = [c for c in knn_impute_cols if c not in high_missing_cols]
+        
+        if knn_impute_cols:
+            st.subheader("Columns Using KNN")
+            for col in knn_impute_cols:
+                st.text(f"{col}: {missing_pct[col]:.2f}% missing")
+        else:
+            st.info("No columns in the 2-50% missing range.")
+    
+    # Simple Imputation
+    st.header("4. Simple Imputation")
+    
+    st.markdown("""
+    For columns with minimal missingness (<2%), simple central tendency imputation is used:
+    - **Median** for numerical variables
+    - **Mode** for categorical variables
+    """)
+    
+    simple_impute_cols = missing_pct[(missing_pct > 0) & (missing_pct < 2)].index.tolist()
+    simple_impute_cols = [c for c in simple_impute_cols if c not in high_missing_cols]
+    
+    if simple_impute_cols:
+        st.info(f"**Columns with simple imputation:** {', '.join(simple_impute_cols)}")
+    else:
+        st.success("No columns require simple imputation.")
+    
+    # Outlier Detection
+    st.header("5. Outlier Detection")
+    
+    st.markdown("""
+    Outliers are detected using the Interquartile Range (IQR) method. While outliers 
+    are identified, they are generally retained as they may represent genuine extreme 
+    cases in cardiovascular health data.
+    """)
+    
+    numeric_cols_raw = data_raw.select_dtypes(include=['number']).columns.tolist()
+    
+    # Calculate outliers for one example column
+    if 'TOTCHOL' in numeric_cols_raw:
+        example_col = 'TOTCHOL'
+        Q1 = data_raw[example_col].quantile(0.25)
+        Q3 = data_raw[example_col].quantile(0.75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+        outliers = data_raw[(data_raw[example_col] < lower_bound) | 
+                           (data_raw[example_col] > upper_bound)][example_col]
+        
+        col1, col2 = st.columns([3, 2])
+        
+        with col1:
+            # Box plot showing outliers
+            fig_outlier = px.box(data_raw, y=example_col,
+                               title=f'Outlier Detection Example: {example_col}')
+            st.plotly_chart(fig_outlier, use_container_width=True)
+        
+        with col2:
+            st.subheader("IQR Method")
+            st.code(f"""Q1 = {Q1:.2f}
+Q3 = {Q3:.2f}
+IQR = {IQR:.2f}
+Lower Bound = {lower_bound:.2f}
+Upper Bound = {upper_bound:.2f}
+
+Outliers: {len(outliers)} ({len(outliers)/len(data_raw)*100:.2f}%)""")
+    
+    # Distribution Comparison: Before and After Imputation
+    st.header("5a. Distribution Comparison: Before vs After Imputation")
+    
+    st.markdown("""
+    Comparing distributions before and after imputation helps verify that the imputation 
+    process maintains the statistical properties of the data.
+    """)
+    
+    # Select columns that had imputation applied
+    cols_with_missing = missing_pct[(missing_pct > 0) & (missing_pct <= 50)].index.tolist()
+    cols_with_missing = [c for c in cols_with_missing if c in data_raw.columns and c in data_imputed.columns]
+    
+    if cols_with_missing:
+        # Let user select a column to compare
+        selected_comparison_col = st.selectbox(
+            "Select a column to compare distributions:",
+            cols_with_missing,
+            index=0 if cols_with_missing else None
+        )
+        
+        if selected_comparison_col:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("Before Imputation")
+                fig_before = go.Figure()
+                
+                # Histogram
+                fig_before.add_trace(go.Histogram(
+                    x=data_raw[selected_comparison_col].dropna(),
+                    nbinsx=30,
+                    name='Histogram',
+                    marker_color='lightblue'
+                ))
+                
+                # KDE
+                values_before = data_raw[selected_comparison_col].dropna()
+                if len(values_before) > 1:
+                    kde_x = np.linspace(values_before.min(), values_before.max(), 100)
+                    kde = stats.gaussian_kde(values_before)
+                    kde_y = kde(kde_x)
+                    fig_before.add_trace(go.Scatter(
+                        x=kde_x,
+                        y=kde_y * len(values_before) * (values_before.max() - values_before.min()) / 30,
+                        mode='lines',
+                        name='KDE',
+                        line=dict(color='red', width=2)
+                    ))
+                
+                fig_before.update_layout(
+                    title=f'{selected_comparison_col} - Before Imputation',
+                    xaxis_title=selected_comparison_col,
+                    yaxis_title='Count',
+                    showlegend=False,
+                    height=350
+                )
+                st.plotly_chart(fig_before, use_container_width=True)
+                
+                # Statistics before
+                st.metric("Count (non-null)", f"{data_raw[selected_comparison_col].notna().sum():,}")
+                st.metric("Missing", f"{data_raw[selected_comparison_col].isna().sum():,} ({missing_pct[selected_comparison_col]:.2f}%)")
+            
+            with col2:
+                st.subheader("After Imputation")
+                fig_after = go.Figure()
+                
+                # Histogram
+                fig_after.add_trace(go.Histogram(
+                    x=data_imputed[selected_comparison_col],
+                    nbinsx=30,
+                    name='Histogram',
+                    marker_color='lightgreen'
+                ))
+                
+                # KDE
+                values_after = data_imputed[selected_comparison_col].dropna()
+                if len(values_after) > 1:
+                    kde_x = np.linspace(values_after.min(), values_after.max(), 100)
+                    kde = stats.gaussian_kde(values_after)
+                    kde_y = kde(kde_x)
+                    fig_after.add_trace(go.Scatter(
+                        x=kde_x,
+                        y=kde_y * len(values_after) * (values_after.max() - values_after.min()) / 30,
+                        mode='lines',
+                        name='KDE',
+                        line=dict(color='darkgreen', width=2)
+                    ))
+                
+                fig_after.update_layout(
+                    title=f'{selected_comparison_col} - After Imputation',
+                    xaxis_title=selected_comparison_col,
+                    yaxis_title='Count',
+                    showlegend=False,
+                    height=350
+                )
+                st.plotly_chart(fig_after, use_container_width=True)
+                
+                # Statistics after
+                st.metric("Count (non-null)", f"{data_imputed[selected_comparison_col].notna().sum():,}")
+                st.metric("Missing", f"{data_imputed[selected_comparison_col].isna().sum():,}")
+    else:
+        st.info("No columns with missing data to compare.")
+    
+    # Correlation Comparison: Before and After Imputation
+    st.header("5b. Correlation Comparison: Before vs After Imputation")
+    
+    st.markdown("""
+    Comparing correlation matrices before and after imputation reveals how imputation 
+    affects relationships between variables. Proper imputation should preserve or enhance 
+    existing correlations without introducing spurious relationships.
+    """)
+    
+    # Select key numeric variables for correlation comparison
+    available_vars_for_corr = data_imputed.columns
+    
+    if len(available_vars_for_corr) > 1:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Before Imputation")
+            # Calculate correlation only on complete cases
+            corr_before = data_raw[available_vars_for_corr].corr()
+            
+            fig_corr_before = px.imshow(
+                corr_before,
+                text_auto='.2f',
+                aspect="auto",
+                color_continuous_scale='RdBu_r',
+                zmin=-1, zmax=1,
+                title='Correlation Matrix - Before Imputation'
+            )
+            fig_corr_before.update_layout(height=500)
+            st.plotly_chart(fig_corr_before, use_container_width=True)
+        
+        with col2:
+            st.subheader("After Imputation")
+            # Calculate correlation on imputed data
+            corr_after = data_imputed[available_vars_for_corr].corr()
+            
+            fig_corr_after = px.imshow(
+                corr_after,
+                text_auto='.2f',
+                aspect="auto",
+                color_continuous_scale='RdBu_r',
+                zmin=-1, zmax=1,
+                title='Correlation Matrix - After Imputation'
+            )
+            fig_corr_after.update_layout(height=500)
+            st.plotly_chart(fig_corr_after, use_container_width=True)
+        
+        # Calculate and display correlation differences
+        st.subheader("Correlation Changes")
+        corr_diff = corr_after - corr_before
+        
+        fig_corr_diff = px.imshow(
+            corr_diff,
+            text_auto='.2f',
+            aspect="auto",
+            color_continuous_scale='RdBu_r',
+            zmin=-0.5, zmax=0.5,
+            title='Correlation Difference (After - Before)'
+        )
+        fig_corr_diff.update_layout(height=500)
+        st.plotly_chart(fig_corr_diff, use_container_width=True)
+        
+        st.markdown("""
+        **Interpreting the difference:**
+        - **Positive values (red):** Correlation increased after imputation
+        - **Negative values (blue):** Correlation decreased after imputation
+        - **Near zero (white):** Little to no change in correlation
+        """)
+    else:
+        st.warning("Insufficient variables available for correlation comparison.")
+    
+    # Skewness Analysis
+    st.header("6. Skewness Analysis and Correction")
+    
+    st.markdown("""
+    Skewness affects model performance. Features with |skewness| > 0.5 are transformed 
+    using PowerTransformer (Yeo-Johnson method) to achieve more symmetric distributions.
+    """)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Before Preprocessing")
+        
+        # Calculate skewness on raw data
+        numeric_data = data_raw.select_dtypes(include=['number'])
+        skewness_before = numeric_data.apply(lambda x: stats.skew(x.dropna())).sort_values(ascending=False)
+        
+        skew_df_before = pd.DataFrame({
+            'Feature': skewness_before.index,
+            'Skewness': skewness_before.values
+        }).head(10)
+        
+        fig_skew_before = px.bar(skew_df_before, 
+                                x='Skewness', 
+                                y='Feature',
+                                orientation='h',
+                                title='Top 10 Skewed Features (Raw Data)',
+                                color='Skewness',
+                                color_continuous_scale='RdBu_r')
+        st.plotly_chart(fig_skew_before, use_container_width=True)
+        st.plotly_chart(fig_skew_before, use_container_width=True)
+
+    with col2:
+        st.subheader("After Preprocessing")
+        
+        # Calculate skewness on imputed data
+        numeric_imputed = data_imputed.select_dtypes(include=['number'])
+        skewness_after = numeric_imputed.apply(lambda x: stats.skew(x.dropna())).sort_values(ascending=False)
+        
+        skew_df_after = pd.DataFrame({
+            'Feature': skewness_after.index,
+            'Skewness': skewness_after.values
+        }).head(10)
+        
+        fig_skew_after = px.bar(skew_df_after, 
+                               x='Skewness', 
+                               y='Feature',
+                               orientation='h',
+                               title='Top 10 Skewed Features (After Imputation)',
+                               color='Skewness',
+                               color_continuous_scale='RdBu_r')
+        st.plotly_chart(fig_skew_after, use_container_width=True)
+    
+    st.markdown("""
+    **PowerTransformer (Yeo-Johnson):**
+    - Applied to features with |skewness| >= 0.5
+    - Excludes binary and time-based columns
+    - Standardizes the transformed data
+    - Reduces the impact of extreme values
+    """)
+    
+    # Feature Selection
+    st.header("7. Feature Selection Methods")
+    
+    st.markdown("""
+    Two complementary feature selection methods are employed in the machine learning pipeline:
+    """)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Correlation-Based Filtering")
+        st.markdown("""
+        **Purpose:** Remove redundant features
+        
+        **Method:**
+        - Calculate pairwise correlations
+        - Drop features with correlation >0.90
+        - Retains one from each highly correlated pair
+        
+        **Benefit:** Reduces multicollinearity
+        """)
+    
+    with col2:
+        st.subheader("Recursive Feature Elimination")
+        st.markdown("""
+        **Purpose:** Select most predictive features
+        
+        **Method:**
+        - Use Logistic Regression as estimator
+        - Run RFE with multiple random seeds (n=7)
+        - Select features with at least one vote
+        - Target: top 10 features
+        
+        **Benefit:** Improves model interpretability
+        """)
+    
+    # Train-Test Split Strategy
+    st.header("8. Train-Test Split Strategy")
+    
+    st.markdown("""
+    To prevent data leakage, the preprocessing pipeline follows a strict order:
+    """)
+    
+    st.code("""
+1. Split data (80% train, 20% test) with stratification
+2. Learn imputation parameters from TRAINING set only
+3. Apply learned parameters to both train and test sets
+4. Transform features (skewness correction) on train, then test
+5. Select features based on training set performance
+    """, language="text")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Training Set", "80%")
+    with col2:
+        st.metric("Test Set", "20%")
+    with col3:
+        st.metric("Stratification", "By CVD outcome")
+    
+    # Summary
+    st.header("9. Preprocessing Pipeline Summary")
+    
+    st.markdown("""
+    The complete preprocessing pipeline ensures:
+    - **No data leakage** between train and test sets
+    - **Appropriate handling** of different types of missingness
+    - **Distribution normalization** for better model performance
+    - **Feature redundancy reduction** through correlation analysis
+    - **Optimal feature selection** using RFE
+    """)
+    
+    # Create a flow diagram
+    st.subheader("Preprocessing Flow")
+    
+    preprocessing_steps = pd.DataFrame({
+        'Step': ['1. Load Data', '2. Train-Test Split', '3. Drop Columns (>50% missing)', 
+                '4. KNN Imputation (2-50%)', '5. Simple Imputation (<2%)', 
+                '6. Skewness Correction', '7. Correlation Filter', '8. Feature Selection (RFE)'],
+        'Purpose': ['Load raw dataset', 'Stratified 80-20 split', 'Remove low-information features',
+                   'Predict moderate missingness', 'Fill minimal missingness', 
+                   'Normalize distributions', 'Remove redundancy', 'Select best predictors'],
+        'Output': [f'{data_raw.shape[0]} rows, {data_raw.shape[1]} cols', 
+                  'Separate train/test', f'{data_raw.shape[1] - len(high_missing_cols)} cols',
+                  'Complete train/test', 'No missing values',
+                  'Normalized features', 'Reduced feature set', 'Final feature set']
+    })
+    
+    st.dataframe(preprocessing_steps, use_container_width=True, hide_index=True)
 
 # Data Overview Section
 elif selected == 'Exploratory Data Analysis':
@@ -145,6 +636,7 @@ elif selected == 'Exploratory Data Analysis':
     st.subheader("Correlation Analysis")
     all_vars = data_imputed.select_dtypes(include=['float64', 'int64']).columns.tolist()
     key_vars = ['AGE', 'TOTCHOL', 'SYSBP', 'DIABP', 'BMI', 'HEARTRATE', 'GLUCOSE', 'CVD']
+    key_vars = ['AGE', 'TOTCHOL', 'SYSBP', 'DIABP', 'BMI', 'HEARTRATE', 'GLUCOSE']
 
     options = ["Key Variables", "All Variables"]
     var_type = st.segmented_control("Select variables to analyze", options, selection_mode="single", default = "Key Variables")
@@ -164,12 +656,14 @@ elif selected == 'Exploratory Data Analysis':
 
         st.subheader("Pairplot Analysis")
         st.warning("Due to memory constraints, only Key Variables can be shown while in the deployed app.")
+        st.warning("Due to memory constraints, only Key Variables can be shown.")
 
         options = ["Pretty", "Resource-friendly"]
         efficiency = st.segmented_control("How should the data be displayed?", options, selection_mode="single",
                                         default="Resource-friendly")
         if efficiency == "Pretty":
             st.warning("Will take a long time to run if on own hardware, won't run on deployed app.")
+            st.warning("Will take a long time to run")
             @st.cache_resource(show_spinner=True, show_time=True)
             def pairplots(available_vars):
                 fig = make_subplots(rows=len(available_vars), cols=len(available_vars),
@@ -332,7 +826,8 @@ elif selected == 'Machine Learning Results':
     
     # Prepare data for ML with proper train-test split before imputation
     from processing_functions import train_test_imputation, apply_skewness_correction
-
+    
+    # Use CVD as the target variable (as in Code.ipynb)
     if 'CVD' in data_raw.columns:
         # First, split the raw data
         CategoryColumn = 'CVD'
@@ -341,15 +836,8 @@ elif selected == 'Machine Learning Results':
         X = X.drop(columns=time_cols)
         y = data_raw[CategoryColumn]
         
+        # Train-test split (80-20) with stratification
         X_train, X_test, Y_train, Y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=2025)
-        
-        with st.expander("Data Preprocessing Steps", expanded=False):
-            st.markdown("""
-            1. **Train-Test Split**: 80-20 split with stratification
-            2. **Imputation**: Learn from training data and apply to both training and testing set
-            3. **Skewness Correction**: PowerTransformer (Yeo-Johnson method)
-            4. **Feature Selection**: Recursive Feature Elimination (RFE)
-            """)
         
         # Apply train-test imputation
         with st.spinner("Applying imputation..."):
@@ -402,15 +890,15 @@ elif selected == 'Machine Learning Results':
             # Generate seeds for robust feature selection
             rng = np.random.RandomState(seed=2025)
             seeds = rng.randint(low=0, high=10000, size=7)
-
+            
             votes = np.zeros(X_train_corrected.shape[1], dtype=int)
-
+            
             for seed in seeds:
                 model = LogisticRegression(random_state=seed, max_iter=2000, solver='lbfgs')
                 rfe = RFE(estimator=model, n_features_to_select=10)
                 rfe.fit(X_train_corrected, Y_train)
                 votes += rfe.support_.astype(int)
-
+            
             # Select features that got at least one vote
             mask = votes > 0
             top_features = X_train_corrected.columns[mask].tolist()
@@ -552,13 +1040,181 @@ elif selected == 'Machine Learning Results':
                                  color_continuous_scale='Greens')
             st.plotly_chart(fig_cm_dt, use_container_width=True)
         
+        # Random Forest with Hyperparameter Tuning
+        st.header("3. Random Forest Classifier with Hyperparameter Tuning")
+        
+        st.markdown("""
+        Random Forest is an ensemble method that builds multiple decision trees and combines 
+        their predictions. Experiment with different hyperparameters to find the optimal configuration.
+        """)
+        
+        # Hyperparameter controls
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            n_estimators = st.slider(
+                "Number of Trees (n_estimators)",
+                min_value=10,
+                max_value=500,
+                value=100,
+                step=10,
+                help="Number of trees in the forest. More trees generally improve performance but increase computation time."
+            )
+        
+        with col2:
+            max_depth = st.slider(
+                "Maximum Depth",
+                min_value=2,
+                max_value=50,
+                value=10,
+                step=1,
+                help="Maximum depth of each tree. Deeper trees can capture more complexity but may overfit."
+            )
+        
+        with col3:
+            min_samples_split = st.slider(
+                "Min Samples Split",
+                min_value=2,
+                max_value=20,
+                value=2,
+                step=1,
+                help="Minimum number of samples required to split an internal node."
+            )
+        
+        col4, col5, col6 = st.columns(3)
+        
+        with col4:
+            min_samples_leaf = st.slider(
+                "Min Samples Leaf",
+                min_value=1,
+                max_value=20,
+                value=1,
+                step=1,
+                help="Minimum number of samples required at a leaf node."
+            )
+        
+        with col5:
+            max_features = st.selectbox(
+                "Max Features",
+                options=['sqrt', 'log2', None],
+                index=0,
+                help="Number of features to consider when looking for the best split."
+            )
+        
+        with col6:
+            class_weight_rf = st.selectbox(
+                "Class Weight",
+                options=['balanced', 'balanced_subsample', None],
+                index=0,
+                help="Weights associated with classes to handle imbalanced data."
+            )
+        
+        # Train button
+        if st.button("Train Random Forest Model", type="primary"):
+            with st.spinner("Training Random Forest model..."):
+                # Train Random Forest with selected hyperparameters
+                rf_model = RandomForestClassifier(
+                    n_estimators=n_estimators,
+                    max_depth=max_depth,
+                    min_samples_split=min_samples_split,
+                    min_samples_leaf=min_samples_leaf,
+                    max_features=max_features,
+                    class_weight=class_weight_rf,
+                    random_state=2025,
+                    n_jobs=-1
+                )
+                rf_model.fit(X_train_corrected, Y_train)
+                y_pred_rf = rf_model.predict(X_test_corrected)
+                
+                accuracy_rf = accuracy_score(Y_test, y_pred_rf)
+                f1_rf = f1_score(Y_test, y_pred_rf)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("Model Performance")
+                st.metric("Accuracy", f"{accuracy_rf:.4f}")
+                st.metric("F1 Score", f"{f1_rf:.4f}")
+                
+                # Hyperparameters used
+                st.subheader("Hyperparameters Used")
+                st.code(f"""n_estimators: {n_estimators}
+max_depth: {max_depth}
+min_samples_split: {min_samples_split}
+min_samples_leaf: {min_samples_leaf}
+max_features: {max_features}
+class_weight: {class_weight_rf}""")
+                
+                # Feature importance
+                feature_importance_rf = pd.DataFrame({
+                    'Feature': X_train_corrected.columns,
+                    'Importance': rf_model.feature_importances_
+                }).sort_values('Importance', ascending=False)
+                
+                st.subheader("Top 10 Important Features")
+                fig_importance_rf = px.bar(feature_importance_rf.head(10), 
+                                          x='Importance', y='Feature',
+                                          orientation='h',
+                                          title='Feature Importance',
+                                          color='Importance',
+                                          color_continuous_scale='Viridis')
+                st.plotly_chart(fig_importance_rf, use_container_width=True)
+            
+            with col2:
+                # Confusion matrix
+                cm_rf = confusion_matrix(Y_test, y_pred_rf)
+                
+                fig_cm_rf = px.imshow(cm_rf, 
+                                     text_auto=True,
+                                     labels=dict(x="Predicted", y="Actual"),
+                                     x=['No CVD', 'CVD'],
+                                     y=['No CVD', 'CVD'],
+                                     title='Confusion Matrix - Random Forest',
+                                     color_continuous_scale='Oranges')
+                st.plotly_chart(fig_cm_rf, use_container_width=True)
+                
+                # Additional metrics
+                st.subheader("Detailed Metrics")
+                
+                precision_rf = precision_score(Y_test, y_pred_rf)
+                recall_rf = recall_score(Y_test, y_pred_rf)
+                
+                metrics_df = pd.DataFrame({
+                    'Metric': ['Accuracy', 'Precision', 'Recall', 'F1 Score'],
+                    'Score': [accuracy_rf, precision_rf, recall_rf, f1_rf]
+                })
+                
+                fig_metrics = px.bar(metrics_df, x='Metric', y='Score',
+                                    title='Performance Metrics',
+                                    color='Score',
+                                    color_continuous_scale='Blues',
+                                    text='Score')
+                fig_metrics.update_traces(texttemplate='%{text:.3f}', textposition='outside')
+                fig_metrics.update_layout(showlegend=False, height=350)
+                st.plotly_chart(fig_metrics, use_container_width=True)
+            
+            # Store results for comparison
+            st.session_state['rf_accuracy'] = accuracy_rf
+            st.session_state['rf_f1'] = f1_rf
+        
         # Model Comparison
-        st.header("3. Model Comparison")
+        st.header("4. Model Comparison")
+        
+        # Build comparison dataframe
+        models_list = ['Baseline LR', 'Selected Features LR', 'Decision Tree']
+        accuracy_list = [accuracy_baseline, accuracy_selected, accuracy_dt]
+        f1_list = [f1_baseline, f1_selected, f1_dt]
+        
+        # Add Random Forest if it was trained
+        if 'rf_accuracy' in st.session_state and 'rf_f1' in st.session_state:
+            models_list.append('Random Forest')
+            accuracy_list.append(st.session_state['rf_accuracy'])
+            f1_list.append(st.session_state['rf_f1'])
         
         comparison_df = pd.DataFrame({
-            'Model': ['Baseline LR', 'Selected Features LR', 'Decision Tree'],
-            'Accuracy': [accuracy_baseline, accuracy_selected, accuracy_dt],
-            'F1 Score': [f1_baseline, f1_selected, f1_dt]
+            'Model': models_list,
+            'Accuracy': accuracy_list,
+            'F1 Score': f1_list
         })
         
         fig_comparison = px.bar(comparison_df, x='Model', y=['Accuracy', 'F1 Score'],
@@ -572,7 +1228,7 @@ elif selected == 'Machine Learning Results':
         best_model = comparison_df.iloc[best_model_idx]['Model']
         best_f1 = comparison_df.iloc[best_model_idx]['F1 Score']
         
-        st.success(f"Best Model: **{best_model}** with F1 Score of **{best_f1:.4f}**")
+        st.success(f"🏆 Best Model: **{best_model}** with F1 Score of **{best_f1:.4f}**")
     else:
         st.warning("CVD column not available in the dataset for machine learning analysis.")
 
