@@ -515,8 +515,10 @@ elif selected == 'Machine Learning Results':
         with col1:
             dt_model = DecisionTreeClassifier(criterion='entropy', random_state=2025, 
                                              class_weight='balanced')
-            dt_model.fit(X_train_corrected, Y_train)
-            y_pred_dt = dt_model.predict(X_test_corrected)
+            # Remove TIME variables from training data
+            train_cols = [col for col in X_train_corrected.columns if not col.startswith('TIME')]
+            dt_model.fit(X_train_corrected[train_cols], Y_train)
+            y_pred_dt = dt_model.predict(X_test_corrected[train_cols])
             
             accuracy_dt = accuracy_score(Y_test, y_pred_dt)
             f1_dt = f1_score(Y_test, y_pred_dt)
