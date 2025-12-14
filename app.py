@@ -395,7 +395,7 @@ elif selected == 'Machine Learning Results':
 
 
         @st.cache_resource(show_spinner=True, show_time=True)
-        def RFE(X):
+        def recursive_feature_elimination(X):
             X_train_corrected = X
             # Generate seeds for robust feature selection
             rng = np.random.RandomState(seed=2025)
@@ -413,7 +413,8 @@ elif selected == 'Machine Learning Results':
             mask = votes > 0
             top_features = X_train_corrected.columns[mask].tolist()
             return top_features
-        top_features = RFE(X_train_corrected)
+        model = LogisticRegression()
+        top_features = recursive_feature_elimination(X_train_corrected)
         st.info(f"Selected {len(top_features)} features: {', '.join(top_features[:10])}...")
         
         # Train model with selected features
