@@ -392,24 +392,28 @@ elif selected == 'Machine Learning Results':
         
         # Feature Selection with RFE
         st.subheader("Feature Selection with Recursive Feature Elimination (RFE)")
-        
-        with st.spinner("Performing feature selection with multiple seeds..."):
+
+
+        @st.cache_resource(show_spinner=True, show_time=True)
+        def RFE(X):
+            X_train_corrected = X
             # Generate seeds for robust feature selection
             rng = np.random.RandomState(seed=2025)
             seeds = rng.randint(low=0, high=10000, size=7)
-            
+
             votes = np.zeros(X_train_corrected.shape[1], dtype=int)
-            
+
             for seed in seeds:
                 model = LogisticRegression(random_state=seed, max_iter=2000, solver='lbfgs')
                 rfe = RFE(estimator=model, n_features_to_select=10)
                 rfe.fit(X_train_corrected, Y_train)
                 votes += rfe.support_.astype(int)
-            
+
             # Select features that got at least one vote
             mask = votes > 0
             top_features = X_train_corrected.columns[mask].tolist()
-        
+            return top_features
+        top_features = RFE(X_train_corrected)
         st.info(f"Selected {len(top_features)} features: {', '.join(top_features[:10])}...")
         
         # Train model with selected features
