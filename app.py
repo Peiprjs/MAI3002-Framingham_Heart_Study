@@ -101,17 +101,12 @@ elif selected == 'Data Preprocessing':
     st.title("Data Preprocessing")
     
     st.markdown("""
-    This section describes the comprehensive data preprocessing pipeline applied to prepare 
+    This section describes the data preprocessing pipeline used to prepare 
     the Framingham Heart Study dataset for analysis and machine learning.
     """)
     
     # Missing Data Analysis
     st.header("1. Missing Data Analysis")
-    
-    st.markdown("""
-    The first step in preprocessing is to understand and handle missing data. The dataset 
-    contains various levels of missingness across different features.
-    """)
     
     col1, col2 = st.columns([3, 2])
     
@@ -137,7 +132,7 @@ elif selected == 'Data Preprocessing':
             st.info("No missing data detected in the dataset.")
     
     with col2:
-        st.subheader("Missing Data Strategy")
+        st.subheader("Missing Data Handling")
         st.markdown("""
         **Three-tier approach:**
         
@@ -160,7 +155,7 @@ elif selected == 'Data Preprocessing':
     st.header("2. Dropping High-Missing Columns")
     
     st.markdown("""
-    Columns with more than 50% missing values are removed from the dataset as they 
+    Columns with more than 50% missing values were removed from the dataset as they 
     provide insufficient information for reliable analysis or imputation.
     """)
     
@@ -176,13 +171,14 @@ elif selected == 'Data Preprocessing':
     
     st.markdown("""
     For columns with moderate missingness (2-50%), K-Nearest Neighbors (KNN) imputation 
-    is used. This method predicts missing values based on similar observations.
+    was used. The KNN imputer was trained on the X-train split, and then applied to the X-test and X-train split
+    in order to prevent data leakage from an improperly trained imputer.
     """)
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("How KNN Imputation Works")
+        st.subheader("How Our KNN Imputation Works")
         st.markdown("""
         1. **One-hot encode** categorical variables
         2. For each column with missing data:
@@ -222,48 +218,8 @@ elif selected == 'Data Preprocessing':
     else:
         st.success("No columns require simple imputation.")
     
-    # Outlier Detection
-    st.header("5. Outlier Detection")
-    
-    st.markdown("""
-    Outliers are detected using the Interquartile Range (IQR) method. While outliers 
-    are identified, they are generally retained as they may represent genuine extreme 
-    cases in cardiovascular health data.
-    """)
-    
-    numeric_cols_raw = data_raw.select_dtypes(include=['number']).columns.tolist()
-    
-    # Calculate outliers for one example column
-    if 'TOTCHOL' in numeric_cols_raw:
-        example_col = 'TOTCHOL'
-        Q1 = data_raw[example_col].quantile(0.25)
-        Q3 = data_raw[example_col].quantile(0.75)
-        IQR = Q3 - Q1
-        lower_bound = Q1 - 1.5 * IQR
-        upper_bound = Q3 + 1.5 * IQR
-        outliers = data_raw[(data_raw[example_col] < lower_bound) | 
-                           (data_raw[example_col] > upper_bound)][example_col]
-        
-        col1, col2 = st.columns([3, 2])
-        
-        with col1:
-            # Box plot showing outliers
-            fig_outlier = px.box(data_raw, y=example_col,
-                               title=f'Outlier Detection Example: {example_col}')
-            st.plotly_chart(fig_outlier, use_container_width=True)
-        
-        with col2:
-            st.subheader("IQR Method")
-            st.code(f"""Q1 = {Q1:.2f}
-Q3 = {Q3:.2f}
-IQR = {IQR:.2f}
-Lower Bound = {lower_bound:.2f}
-Upper Bound = {upper_bound:.2f}
-
-Outliers: {len(outliers)} ({len(outliers)/len(data_raw)*100:.2f}%)""")
-    
     # Distribution Comparison: Before and After Imputation
-    st.header("5a. Distribution Comparison: Before vs After Imputation")
+    st.header("5. Distribution Comparison: Before vs After Imputation")
     
     st.markdown("""
     Comparing distributions before and after imputation helps verify that the imputation 
@@ -435,9 +391,49 @@ Outliers: {len(outliers)} ({len(outliers)/len(data_raw)*100:.2f}%)""")
         """)
     else:
         st.warning("Insufficient variables available for correlation comparison.")
-    
+
+    # Outlier Detection
+    st.header("6. Outlier Detection")
+
+    st.markdown("""
+    Outliers were detected using the Interquartile Range (IQR) method. While outliers 
+    were identified, they were kept, as they may represent genuine extreme 
+    cases in cardiovascular health data. Such cases may represent diseased cases that we would like our model to also be able to identify.
+    """)
+
+    numeric_cols_raw = data_raw.select_dtypes(include=['number']).columns.tolist()
+
+    # Add selectbox for variable selection
+    example_col = st.selectbox("Select variable for outlier detection:", numeric_cols_raw)
+
+    # Calculate outliers for selected column
+    Q1 = data_raw[example_col].quantile(0.25)
+    Q3 = data_raw[example_col].quantile(0.75)
+    IQR = Q3 - Q1
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    outliers = data_raw[(data_raw[example_col] < lower_bound) |
+                        (data_raw[example_col] > upper_bound)][example_col]
+
+    col1, col2 = st.columns([3, 2])
+
+    with col1:
+        # Box plot showing outliers
+        fig_outlier = px.box(data_raw, y=example_col,
+                             title=f'Box-and-whiskers plot of {example_col}')
+        st.plotly_chart(fig_outlier, use_container_width=True)
+
+    with col2:
+        st.subheader("IQR Method")
+        st.code(f"""Q1 = {Q1:.2f}
+    Q3 = {Q3:.2f}
+    IQR = {IQR:.2f}
+    Lower Bound = {lower_bound:.2f}
+    Upper Bound = {upper_bound:.2f}
+    Outliers: {len(outliers)} ({len(outliers) / len(data_raw) * 100:.2f}%)""")
+
     # Skewness Analysis
-    st.header("6. Skewness Analysis and Correction")
+    st.header("7. Skewness Analysis and Correction")
     
     st.markdown("""
     Skewness affects model performance. Features with |skewness| > 0.5 are transformed 
@@ -465,7 +461,6 @@ Outliers: {len(outliers)} ({len(outliers)/len(data_raw)*100:.2f}%)""")
                                 title='Top 10 Skewed Features (Raw Data)',
                                 color='Skewness',
                                 color_continuous_scale='RdBu_r')
-        st.plotly_chart(fig_skew_before, use_container_width=True)
         st.plotly_chart(fig_skew_before, use_container_width=True)
 
     with col2:
@@ -498,7 +493,7 @@ Outliers: {len(outliers)} ({len(outliers)/len(data_raw)*100:.2f}%)""")
     """)
     
     # Feature Selection
-    st.header("7. Feature Selection Methods")
+    st.header("8. Feature Selection Methods")
     
     st.markdown("""
     Two complementary feature selection methods are employed in the machine learning pipeline:
@@ -534,7 +529,7 @@ Outliers: {len(outliers)} ({len(outliers)/len(data_raw)*100:.2f}%)""")
         """)
     
     # Train-Test Split Strategy
-    st.header("8. Train-Test Split Strategy")
+    st.header("9. Train-Test Split Strategy")
     
     st.markdown("""
     To prevent data leakage, the preprocessing pipeline follows a strict order:
@@ -632,11 +627,24 @@ elif selected == 'Exploratory Data Analysis':
                       height=400)
     st.plotly_chart(fig, use_container_width=True)
 
+    # Box-whisker plot selector: all variables or selected variable
+    box_scope = st.selectbox("Show box-whisker plot for", ["All numeric variables", "Selected variable"], index=0)
+
+    if box_scope == "All numeric variables":
+        # Convert to long form and plot one box per numeric variable
+        df_long = data_to_use[numeric_cols].melt(var_name='Variable', value_name='Value')
+        fig_box_all = px.box(df_long, x='Variable', y='Value', points='outliers',
+                             title='Box-Whisker Plots for All Numeric Variables')
+        fig_box_all.update_layout(height=600)
+        st.plotly_chart(fig_box_all, use_container_width=True)
+    else:
+        fig_box = px.box(data_to_use, y=selected_col, title=f'Box-Whisker Plot: {selected_col}')
+        st.plotly_chart(fig_box, use_container_width=True)
+
     # Correlation heatmap
     st.subheader("Correlation Analysis")
     all_vars = data_imputed.select_dtypes(include=['float64', 'int64']).columns.tolist()
     key_vars = ['AGE', 'TOTCHOL', 'SYSBP', 'DIABP', 'BMI', 'HEARTRATE', 'GLUCOSE', 'CVD']
-    key_vars = ['AGE', 'TOTCHOL', 'SYSBP', 'DIABP', 'BMI', 'HEARTRATE', 'GLUCOSE']
 
     options = ["Key Variables", "All Variables"]
     var_type = st.segmented_control("Select variables to analyze", options, selection_mode="single", default = "Key Variables")
@@ -656,14 +664,11 @@ elif selected == 'Exploratory Data Analysis':
 
         st.subheader("Pairplot Analysis")
         st.warning("Due to memory constraints, only Key Variables can be shown while in the deployed app.")
-        st.warning("Due to memory constraints, only Key Variables can be shown.")
-
         options = ["Pretty", "Resource-friendly"]
         efficiency = st.segmented_control("How should the data be displayed?", options, selection_mode="single",
                                         default="Resource-friendly")
         if efficiency == "Pretty":
             st.warning("Will take a long time to run if on own hardware, won't run on deployed app.")
-            st.warning("Will take a long time to run")
             @st.cache_resource(show_spinner=True, show_time=True)
             def pairplots(available_vars):
                 fig = make_subplots(rows=len(available_vars), cols=len(available_vars),
