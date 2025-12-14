@@ -4,12 +4,14 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import streamlit as st
+from sklearn.preprocessing import PowerTransformer
 from streamlit_option_menu import option_menu
 from scipy import stats
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
+from processing_functions import train_test_imputation, apply_skewness_correction
 from sklearn.linear_model import LogisticRegression
 from sklearn.feature_selection import RFE
 import seaborn as sns
@@ -127,7 +129,7 @@ elif selected == 'Data Preprocessing':
                                title='Missing Data by Feature',
                                labels={'Missing Percentage': 'Missing (%)'})
             fig_missing.update_layout(height=400)
-            st.plotly_chart(fig_missing, use_container_width=True)
+            st.plotly_chart(fig_missing, width="stretch")
         else:
             st.info("No missing data detected in the dataset.")
     
@@ -274,7 +276,7 @@ elif selected == 'Data Preprocessing':
                     showlegend=False,
                     height=350
                 )
-                st.plotly_chart(fig_before, use_container_width=True)
+                st.plotly_chart(fig_before, width="stretch")
                 
                 # Statistics before
                 st.metric("Count (non-null)", f"{data_raw[selected_comparison_col].notna().sum():,}")
@@ -313,7 +315,7 @@ elif selected == 'Data Preprocessing':
                     showlegend=False,
                     height=350
                 )
-                st.plotly_chart(fig_after, use_container_width=True)
+                st.plotly_chart(fig_after, width="stretch")
                 
                 # Statistics after
                 st.metric("Count (non-null)", f"{data_imputed[selected_comparison_col].notna().sum():,}")
@@ -332,7 +334,6 @@ elif selected == 'Data Preprocessing':
     
     # Select key numeric variables for correlation comparison
     available_vars_for_corr = data_imputed.columns
-    
     if len(available_vars_for_corr) > 1:
         col1, col2 = st.columns(2)
         
@@ -350,7 +351,7 @@ elif selected == 'Data Preprocessing':
                 title='Correlation Matrix - Before Imputation'
             )
             fig_corr_before.update_layout(height=500)
-            st.plotly_chart(fig_corr_before, use_container_width=True)
+            st.plotly_chart(fig_corr_before, width="stretch")
         
         with col2:
             st.subheader("After Imputation")
@@ -366,28 +367,44 @@ elif selected == 'Data Preprocessing':
                 title='Correlation Matrix - After Imputation'
             )
             fig_corr_after.update_layout(height=500)
-            st.plotly_chart(fig_corr_after, use_container_width=True)
+            st.plotly_chart(fig_corr_after, width="stretch")
         
         # Calculate and display correlation differences
         st.subheader("Correlation Changes")
-        corr_diff = corr_after - corr_before
-        
+        df_a = data_raw.drop(columns=['HDLC', 'LDLC'])
+        df_b = data_imputed
+
+        corr_a = df_a.corr()
+        corr_b = df_b.corr()
+
+        common = corr_a.columns.intersection(corr_b.columns)
+        diff = corr_b.loc[common, common] - corr_a.loc[common, common]
+
+        # Calculate and display correlation differences
         fig_corr_diff = px.imshow(
-            corr_diff,
-            text_auto='.2f',
-            aspect="auto",
-            color_continuous_scale='RdBu_r',
-            zmin=-0.5, zmax=0.5,
-            title='Correlation Difference (After - Before)'
+            diff,
+            color_continuous_scale='RdBu',
+            color_continuous_midpoint=0,
+            aspect="square",
+            title="Correlation Difference: Original vs imputed (without dropped variables)"
         )
-        fig_corr_diff.update_layout(height=500)
-        st.plotly_chart(fig_corr_diff, use_container_width=True)
-        
+
+        # Update the layout to match the original styling
+        fig_corr_diff.update_layout(
+            xaxis=dict(tickangle=90),  # Rotate x-axis labels 90 degrees
+            yaxis=dict(tickangle=0),  # Keep y-axis labels horizontal
+            coloraxis_colorbar=dict(
+                title="Correlation difference"  # Add colorbar label
+            ),
+        )
+        fig_corr_after.update_layout(width=600)
+        st.plotly_chart(fig_corr_diff, width="stretch", height=600)
+
         st.markdown("""
-        **Interpreting the difference:**
-        - **Positive values (red):** Correlation increased after imputation
-        - **Negative values (blue):** Correlation decreased after imputation
-        - **Near zero (white):** Little to no change in correlation
+        **Legend:**
+        - **[Red] Positive values:** Correlation increased after imputation
+        - **[Blue] Negative values:** Correlation decreased after imputation
+        - **[White] Zero or close to zero:** Little to no change in correlation
         """)
     else:
         st.warning("Insufficient variables available for correlation comparison.")
@@ -421,7 +438,7 @@ elif selected == 'Data Preprocessing':
         # Box plot showing outliers
         fig_outlier = px.box(data_raw, y=example_col,
                              title=f'Box-and-whiskers plot of {example_col}')
-        st.plotly_chart(fig_outlier, use_container_width=True)
+        st.plotly_chart(fig_outlier, width="stretch")
 
     with col2:
         st.subheader("IQR Method")
@@ -460,30 +477,46 @@ elif selected == 'Data Preprocessing':
                                 orientation='h',
                                 title='Top 10 Skewed Features (Raw Data)',
                                 color='Skewness',
-                                color_continuous_scale='RdBu_r')
-        st.plotly_chart(fig_skew_before, use_container_width=True)
+                                color_continuous_scale='Reds',
+                                color_continuous_midpoint=0,
+                                range_color=[0, 10],
+                                range_x=[0,10],)
+        st.plotly_chart(fig_skew_before, width="stretch")
 
     with col2:
         st.subheader("After Preprocessing")
         
         # Calculate skewness on imputed data
-        numeric_imputed = data_imputed.select_dtypes(include=['number'])
+        numeric_imputed = data_imputed.drop([col for col in data_imputed if col.startswith('TIME')], axis=1).select_dtypes(include=['number'])
+        imputed_vars = []
+        for column in numeric_imputed:
+            skewness = stats.skew(numeric_imputed[column])
+            if abs(skewness) >= 0.5:
+                pt = PowerTransformer(method='yeo-johnson', standardize=True)
+                col_train = numeric_imputed[[column]]
+                pt.fit(col_train)
+                numeric_imputed[column] = pt.transform(col_train).flatten()
+                imputed_vars.append(column)
+
         skewness_after = numeric_imputed.apply(lambda x: stats.skew(x.dropna())).sort_values(ascending=False)
-        
+
         skew_df_after = pd.DataFrame({
             'Feature': skewness_after.index,
             'Skewness': skewness_after.values
         }).head(10)
-        
-        fig_skew_after = px.bar(skew_df_after, 
+
+        fig_skew_after = px.bar(skew_df_after,
                                x='Skewness', 
                                y='Feature',
                                orientation='h',
                                title='Top 10 Skewed Features (After Imputation)',
                                color='Skewness',
-                               color_continuous_scale='RdBu_r')
-        st.plotly_chart(fig_skew_after, use_container_width=True)
-    
+                               color_continuous_scale='Reds',
+                               color_continuous_midpoint = 0,
+                               range_color=[0,10],
+                               range_x=[0,10],)
+        st.plotly_chart(fig_skew_after, width="stretch")
+    st.warning(f"The columns {', '.join(imputed_vars)} were transformed using PowerTransformer (Yeo-Johnson) to reduce skewness.")
     st.markdown("""
     **PowerTransformer (Yeo-Johnson):**
     - Applied to features with |skewness| >= 0.5
@@ -580,7 +613,7 @@ elif selected == 'Data Preprocessing':
                   'Normalized features', 'Reduced feature set', 'Final feature set']
     })
     
-    st.dataframe(preprocessing_steps, use_container_width=True, hide_index=True)
+    st.dataframe(preprocessing_steps, width="stretch", hide_index=True)
 
 # Data Overview Section
 elif selected == 'Exploratory Data Analysis':
@@ -625,7 +658,7 @@ elif selected == 'Exploratory Data Analysis':
                       template='plotly_white',
                       showlegend=False,
                       height=400)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # Box-whisker plot selector: all variables or selected variable
     box_scope = st.selectbox("Show box-whisker plot for", ["All numeric variables", "Selected variable"], index=0)
@@ -636,10 +669,10 @@ elif selected == 'Exploratory Data Analysis':
         fig_box_all = px.box(df_long, x='Variable', y='Value', points='outliers',
                              title='Box-Whisker Plots for All Numeric Variables')
         fig_box_all.update_layout(height=600)
-        st.plotly_chart(fig_box_all, use_container_width=True)
+        st.plotly_chart(fig_box_all, width="stretch")
     else:
         fig_box = px.box(data_to_use, y=selected_col, title=f'Box-Whisker Plot: {selected_col}')
-        st.plotly_chart(fig_box, use_container_width=True)
+        st.plotly_chart(fig_box, width="stretch")
 
     # Correlation heatmap
     st.subheader("Correlation Analysis")
@@ -660,7 +693,7 @@ elif selected == 'Exploratory Data Analysis':
                              color_continuous_scale='RdBu_r',
                              title=f'Correlation Matrix of {var_type}')
         fig_corr.update_layout(height=500)
-        st.plotly_chart(fig_corr, use_container_width=True)
+        st.plotly_chart(fig_corr, width="stretch")
 
         st.subheader("Pairplot Analysis")
         st.warning("Due to memory constraints, only Key Variables can be shown while in the deployed app.")
@@ -693,7 +726,7 @@ elif selected == 'Exploratory Data Analysis':
 
                 fig.update_layout(height=200 * len(available_vars), showlegend=False)
                 return fig
-            st.plotly_chart(pairplots(key_vars), use_container_width=True)
+            st.plotly_chart(pairplots(key_vars), width="stretch")
         else:
             @st.cache_resource(show_spinner=True, show_time=True)
             def pairplots_eco(data):
@@ -745,7 +778,7 @@ elif selected == 'Statistical Analysis':
                     labels={'CURSMOKE': 'Smoking Status', 'TOTCHOL': 'Total Cholesterol'},
                     title='Total Cholesterol by Smoking Status')
         fig.update_xaxes(ticktext=['Non-Smoker', 'Smoker'], tickvals=[0, 1])
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     
     # Research Question 2: Blood Pressure and Smoking
     st.header("2. Blood Pressure: Smokers vs Non-Smokers")
@@ -763,7 +796,7 @@ elif selected == 'Statistical Analysis':
                         labels={'CURSMOKE': 'Smoking Status', 'SYSBP': 'Systolic BP (mmHg)'},
                         title='Systolic Blood Pressure by Smoking Status')
         fig_sys.update_xaxes(ticktext=['Non-Smoker', 'Smoker'], tickvals=[0, 1])
-        st.plotly_chart(fig_sys, use_container_width=True)
+        st.plotly_chart(fig_sys, width="stretch")
         
         if p_value_sys < 0.05:
             st.success(f"Significant difference (p={p_value_sys:.4f})")
@@ -781,7 +814,7 @@ elif selected == 'Statistical Analysis':
                          labels={'CURSMOKE': 'Smoking Status', 'DIABP': 'Diastolic BP (mmHg)'},
                          title='Diastolic Blood Pressure by Smoking Status')
         fig_dias.update_xaxes(ticktext=['Non-Smoker', 'Smoker'], tickvals=[0, 1])
-        st.plotly_chart(fig_dias, use_container_width=True)
+        st.plotly_chart(fig_dias, width="stretch")
         
         if p_value_dias < 0.05:
             st.success(f"Significant difference (p={p_value_dias:.4f})")
@@ -818,7 +851,7 @@ elif selected == 'Statistical Analysis':
                             labels={'CURSMOKE': 'Smoking Status', 'AGE': 'Age (years)'},
                             title='Age of CVD Patients by Smoking Status')
             fig_age.update_xaxes(ticktext=['Non-Smoker', 'Smoker'], tickvals=[0, 1])
-            st.plotly_chart(fig_age, use_container_width=True)
+            st.plotly_chart(fig_age, width="stretch")
 
 # Machine Learning Results Section
 elif selected == 'Machine Learning Results':
@@ -830,8 +863,7 @@ elif selected == 'Machine Learning Results':
     """)
     
     # Prepare data for ML with proper train-test split before imputation
-    from processing_functions import train_test_imputation, apply_skewness_correction
-    
+
     # Use CVD as the target variable (as in Code.ipynb)
     if 'CVD' in data_raw.columns:
         # First, split the raw data
@@ -883,7 +915,7 @@ elif selected == 'Machine Learning Results':
                               y=['No CVD', 'CVD'],
                               title='Confusion Matrix - Baseline',
                               color_continuous_scale='Blues')
-            st.plotly_chart(fig_cm, use_container_width=True)
+            st.plotly_chart(fig_cm, width="stretch")
         
         # Feature Selection with RFE
         st.subheader("Feature Selection with Recursive Feature Elimination (RFE)")
@@ -956,7 +988,7 @@ elif selected == 'Machine Learning Results':
                 yaxis_title="Feature",
                 height=400
             )
-            st.plotly_chart(fig_importance, use_container_width=True)
+            st.plotly_chart(fig_importance, width="stretch")
         
         with col2:
             # Confusion matrix for selected features
@@ -969,7 +1001,7 @@ elif selected == 'Machine Learning Results':
                                        y=['No CVD', 'CVD'],
                                        title='Confusion Matrix - Selected Features',
                                        color_continuous_scale='Blues')
-            st.plotly_chart(fig_cm_selected, use_container_width=True)
+            st.plotly_chart(fig_cm_selected, width="stretch")
         
         # Correlation-based feature reduction
         st.subheader("Correlation-Based Feature Reduction")
@@ -1030,7 +1062,7 @@ elif selected == 'Machine Learning Results':
                                       x='Importance', y='Feature',
                                       orientation='h',
                                       title='Top 10 Important Features')
-            st.plotly_chart(fig_importance_dt, use_container_width=True)
+            st.plotly_chart(fig_importance_dt, width="stretch")
         
         with col2:
             # Confusion matrix
@@ -1043,7 +1075,7 @@ elif selected == 'Machine Learning Results':
                                  y=['No CVD', 'CVD'],
                                  title='Confusion Matrix - Decision Tree',
                                  color_continuous_scale='Greens')
-            st.plotly_chart(fig_cm_dt, use_container_width=True)
+            st.plotly_chart(fig_cm_dt, width="stretch")
         
         # Random Forest with Hyperparameter Tuning
         st.header("3. Random Forest Classifier with Hyperparameter Tuning")
@@ -1163,7 +1195,7 @@ class_weight: {class_weight_rf}""")
                                           title='Feature Importance',
                                           color='Importance',
                                           color_continuous_scale='Viridis')
-                st.plotly_chart(fig_importance_rf, use_container_width=True)
+                st.plotly_chart(fig_importance_rf, width="stretch")
             
             with col2:
                 # Confusion matrix
@@ -1176,7 +1208,7 @@ class_weight: {class_weight_rf}""")
                                      y=['No CVD', 'CVD'],
                                      title='Confusion Matrix - Random Forest',
                                      color_continuous_scale='Oranges')
-                st.plotly_chart(fig_cm_rf, use_container_width=True)
+                st.plotly_chart(fig_cm_rf, width="stretch")
                 
                 # Additional metrics
                 st.subheader("Detailed Metrics")
@@ -1196,7 +1228,7 @@ class_weight: {class_weight_rf}""")
                                     text='Score')
                 fig_metrics.update_traces(texttemplate='%{text:.3f}', textposition='outside')
                 fig_metrics.update_layout(showlegend=False, height=350)
-                st.plotly_chart(fig_metrics, use_container_width=True)
+                st.plotly_chart(fig_metrics, width="stretch")
             
             # Store results for comparison
             st.session_state['rf_accuracy'] = accuracy_rf
@@ -1226,7 +1258,7 @@ class_weight: {class_weight_rf}""")
                                barmode='group',
                                title='Model Performance Comparison',
                                labels={'value': 'Score', 'variable': 'Metric'})
-        st.plotly_chart(fig_comparison, use_container_width=True)
+        st.plotly_chart(fig_comparison, width="stretch")
         
         # Display best model
         best_model_idx = comparison_df['F1 Score'].idxmax()
