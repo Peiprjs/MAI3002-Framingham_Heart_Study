@@ -1,5 +1,8 @@
 GitHub: https://github.com/Peiprjs/MAI3002-Framingham_Heart_Study
+Submission DOI: https://doi.org/10.5281/zenodo.17945400
+
 Jupyter notebook: https://github.com/Peiprjs/MAI3002-Framingham_Heart_Study/blob/streamlit/Code.ipynb
 Colab access: https://colab.research.google.com/github/Peiprjs/MAI3002-Framingham_Heart_Study/blob/streamlit/Code.ipynb
+
 Streamlit app.py: https://github.com/Peiprjs/MAI3002-Framingham_Heart_Study/blob/streamlit/app.py
 Streamlit deployed app: https://framingham-heart.streamlit.app/
