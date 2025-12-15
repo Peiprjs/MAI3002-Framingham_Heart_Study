@@ -1,24 +1,19 @@
 import warnings
-from io import StringIO
-import sys
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import seaborn as sns
-import matplotlib.pyplot as plt
-
+import shap
+import streamlit as st
+from plotly.subplots import make_subplots
 from scipy import stats
-from sklearn.preprocessing import PowerTransformer
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.feature_selection import RFE
 from sklearn import tree
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_selection import RFE
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
     confusion_matrix,
@@ -26,20 +21,18 @@ from sklearn.metrics import (
     precision_score,
     recall_score
 )
-
-import shap
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.preprocessing import PowerTransformer
+from sklearn.tree import DecisionTreeClassifier
+from streamlit_option_menu import option_menu
 from streamlit_shap import st_shap
 
-import streamlit as st
-from streamlit_option_menu import option_menu
-
-from processing_functions import train_test_imputation, apply_skewness_correction
-from functions import distplots
 from imputation_functions import (
     drop_high_missing_cols,
     knn_impute,
     impute_simple_central
 )
+from processing_functions import train_test_imputation, apply_skewness_correction
 
 st.set_page_config(layout="wide", page_title="Framingham Heart Study")
 
@@ -102,7 +95,7 @@ if selected == 'Introduction':
     st.markdown("""
     ### Background
     
-    Cardiovascular disease remains one of the leading causes of death worldwide [(1)](https://www.who.int/news-room/fact-sheets/detail/cardiovascular-diseases-(cvds)), affecting millions of people 
+    Cardiovascular disease remains one of the leading causes of death worldwide, affecting millions of people 
     each year. Early detection and risk assessment are critical for prevention and intervention strategies. 
     The Framingham Heart Study, which began in 1948, has been instrumental in identifying major risk factors 
     for cardiovascular disease. This longitudinal study has collected extensive data on participants over 
@@ -120,7 +113,7 @@ if selected == 'Introduction':
     informed decisions about patient care and preventive interventions.
      
     
-    ### Why This Matters
+    ### Impact Valorization
     
     Predicting cardiovascular disease risk has several important implications:
     
@@ -1571,11 +1564,127 @@ class_weight: {class_weight_rf}""")
 
 # Conclusion Section
 elif selected == 'Conclusion':
-    st.title("Conclusion")
+    st.title("Conclusion and Key Findings")
+
+    st.markdown("""    
+    ### Summary of our work
+    Our analysis followed a systematic approach to answer this research question:
+    
+    1. **Data Preparation**: We imported the Framingham Heart Study dataset.
+
+    2. **Data Cleaning**: We addressed missing values by dropping columns with over 50% missing cases, KNN imputed those between 50% and 2%, and we simple imputed those below 2%; identified, considered, and handled outliers.
+     
+    3. **Exploratory Analysis**: We examined the relationships between various risk factors and cardiovascular 
+       disease outcomes to understand the data better.
+    
+    4. **Feature Engineering**: We transformed and selected the most relevant features that contribute to 
+       predicting CVD risk while avoiding variables that may expose us to data leakage.
+    
+    5. **Model Development**: We trained and evaluateed multiple machine learning models, including Logistic 
+       Regression, Decision Trees, and Random Forests, to identify the best approach for prediction.
+    
+    6. **Model Evaluation**: We assessed the models' performances using appropriate metrics and validated our results 
+       through cross-validation techniques.
+    
+    ### Main findings
+    #### 1. Critical Variables for CVD Prediction
+    
+    Through feature selection and model analysis, we identified the most important predictors of 
+    cardiovascular disease:
+    
+    - **Age**: Consistently emerged as a top predictor, confirming that CVD risk increases with age
+    - **Blood Pressure**: Both systolic and diastolic blood pressure showed strong predictive power
+    - **Smoking Status**: Current smoking significantly increased CVD risk predictions
+    - **Diabetes**: Presence of diabetes was a strong indicator of elevated CVD risk
+    - **Cholesterol Levels**: Total cholesterol levels contributed meaningfully to predictions
+    
+    These findings align with established medical knowledge, which validates our modeling approach and 
+    provides confidence in the results.
+    
+    #### 3. Model Performance
+    
+    We evaluated three different machine learning approaches:
+    """)
+
+    # Display model comparison if available
+    if 'CVD' in data_raw.columns:
+        st.subheader("Model Performance Summary")
+
+        # This section shows the performance metrics we achieved
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.markdown("**Logistic Regression**")
+            st.markdown("""
+            - Simple and easily interpretable
+            - Good baseline performance
+            - Feature coefficients show risk factors clearly
+            - Best for understanding relationships
+            """)
+
+        with col2:
+            st.markdown("**Decision Tree**")
+            st.markdown("""
+            - Provides clear decision rules
+            - Can handle non-linear relationships 
+            - Cross-validation showed consistent results
+            - Useful for clinical decision-making
+            """)
+
+        with col3:
+            st.markdown("**Random Forest**")
+            st.markdown("""
+            - Achieved highest accuracy
+            - Robust to overfitting
+            - Handles complex interactions
+            - Best overall predictive performance
+            """)
     
     st.markdown("""
-    ## Conclusions
-    We therefore conclude this project is done and so are we.
-    """)
+    All models demonstrated reasonable predictive capability, with F1 scores indicating a good balance 
+    between precision and recall. The Random Forest model, with properly tuned hyperparameters, showed 
+    the best overall performance, though at the cost of some interpretability compared to logistic 
+    regression. This was solved by computing SHAP values.
+        
+    ### Practical Implications
     
-    st.info("Navigate through the different sections using the sidebar to explore detailed analysis and visualizations.")
+    The predictive models developed in this analysis have several practical applications:
+    
+    1. **Clinical Screening**: These models could serve as a first-pass screening tool to identify 
+       patients who would benefit from more comprehensive cardiovascular assessment. A risk score could be attached to each patient's digital healthcare file, and a threshold set for regular cardiovascular checkups.
+    
+    2. **Resource Prioritization**: Healthcare systems with limited resources could use these predictions 
+       to prioritize preventive interventions for the highest-risk individuals.
+    
+    3. **Patient Education**: The feature importance and SHAP analyses provide clear, evidence-based 
+       information that can be used to educate patients about their specific risk factors. The model can be questioned with each application using SHAP, therefore, clinicians can make informed decisions about altering patients' lifestyles.
+    
+    4. **Preventive Care Planning**: By identifying high-risk individuals early, healthcare providers 
+       can implement targeted lifestyle interventions and monitoring programs.
+    
+    ### Limitations and Considerations
+    
+    While our analysis produced promising results, several limitations should be noted:
+    
+    - **Data Limited Geographically**: The Framingham study data, while valuable, does not fully represent modern 
+      populations with different demographics and healthcare contexts. It represents a subset of U.S. patients, which may not be directly applicable to other regions.
+        
+    - **Model Generalization**: These models were developed on a specific population and would need 
+      validation on other datasets before widespread clinical deployment.
+    
+    - **Imbalanced Data**: CVD events are relatively rare in the dataset, which can affect model 
+      performance. 
+    
+    ### Future Directions
+    
+    Building on this work, several directions could enhance these predictive models:
+    
+    - **Longitudinal Analysis**: Incorporating how risk factors change over time could improve predictions
+    - **Additional Features**: Including genetic markers (given the rapidly descending cost of genetic screening), detailed lifestyle information, easy-to-obtain biomarkers, or family history of disease
+      could enhance model accuracy
+    - **External Validation**: Testing these models on independent datasets from different populations 
+      would assess their generalizability
+    - **Real-time Integration**: Developing clinical decision support systems that integrate these 
+      predictions into electronic health records
+    - **Cost-effectiveness Analysis**: Evaluating the economic impact of using these models in practice
+        """)
