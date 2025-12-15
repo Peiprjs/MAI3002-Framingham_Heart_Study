@@ -89,14 +89,115 @@ data_imputed, binary_cols, time_cols = preprocess_data(data_raw)
 with st.sidebar:
     selected = option_menu(
         menu_title='Navigation',
-        options=['Exploratory Data Analysis', 'Data Preprocessing', 'Statistical Analysis', 'Machine Learning Results', 'Conclusion'],
+        options=['Introduction', 'Exploratory Data Analysis', 'Data Preprocessing', 'Statistical Analysis', 'Machine Learning Results', 'Conclusion'],
         menu_icon='heart-pulse',
-        icons=['bar-chart', 'wrench', 'calculator', 'cpu', 'check2-circle'],
-        default_index=4,
+        icons=['book', 'bar-chart', 'wrench', 'calculator', 'cpu', 'check2-circle'],
+        default_index=0,
     )
 
+# Introduction Section
+if selected == 'Introduction':
+    st.title("Predicting Cardiovascular Disease Risk: A Machine Learning Approach")
+    
+    st.markdown("""
+    ### Background
+    
+    Cardiovascular disease remains one of the leading causes of death worldwide [(1)](https://www.who.int/news-room/fact-sheets/detail/cardiovascular-diseases-(cvds)), affecting millions of people 
+    each year. Early detection and risk assessment are critical for prevention and intervention strategies. 
+    The Framingham Heart Study, which began in 1948, has been instrumental in identifying major risk factors 
+    for cardiovascular disease. This longitudinal study has collected extensive data on participants over 
+    multiple decades, providing valuable insights into the factors that contribute to heart disease.
+    
+    ### Research Question""")
+    
+    st.info("Can we accurately predict the 10-year risk of developing cardiovascular disease (CVD) in individuals based on their baseline clinical measurements and lifestyle factors?")
+    
+    st.markdown("""
+    More specifically, we aim to build predictive models that can identify individuals at high 
+    risk for CVD using easily available clinical measurements such as blood pressure, cholesterol levels, 
+    smoking status, diabetes, and other demographic and health-related factors. By developing accurate 
+    prediction models, we hope to provide a tool that could assist healthcare professionals in making 
+    informed decisions about patient care and preventive interventions.
+     
+    
+    ### Why This Matters
+    
+    Predicting cardiovascular disease risk has several important implications:
+    
+    - **Early Intervention**: Identifying high-risk individuals early allows for timely lifestyle modifications 
+      and medical interventions that can prevent or delay the onset of CVD.
+    
+    - **Resource Allocation**: Healthcare systems can better allocate resources and prioritize care for those 
+      most at risk.
+    
+    - **Personalized Medicine**: Prediction models enable more personalized treatment plans tailored to 
+      individual risk profiles.
+    
+    - **Cost Reduction**: Preventing CVD through early detection is far more cost-effective than treating 
+      advanced cardiovascular conditions.
+      
+    - **Harm Reduction**: Preventing CVD through early detection reduces harm when compared to treating 
+      advanced cardiovascular conditions, which may leave the patient with lifelong complications.
+    
+    ### Approach
+    
+    Our analysis follows a systematic approach to answer this research question:
+    
+    1. **Data Preparation**: We start with the Framingham Heart Study dataset, which includes demographic 
+       information, clinical measurements, and outcome data for thousands of participants.
+    
+    2. **Data Cleaning**: We address missing values, identify, consider, and handle outliers.
+     
+    3. **Exploratory Analysis**: We examine the relationships between various risk factors and cardiovascular 
+       disease outcomes to understand the data better.
+    
+    4. **Feature Engineering**: We transform and select the most relevant features that contribute to 
+       predicting CVD risk while avoiding data leakage.
+    
+    5. **Model Development**: We train and evaluate multiple machine learning models, including Logistic 
+       Regression, Decision Trees, and Random Forests, to identify the best approach for prediction.
+    
+    6. **Model Evaluation**: We assess model performance using appropriate metrics and validate our results 
+       through cross-validation techniques.
+    
+    ### Dataset Overview
+    
+    The Framingham Heart Study dataset we're working with contains:
+    """)
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Participants", f"{data_raw.shape[0]:,}")
+    with col2:
+        st.metric("Features Available", data_raw.shape[1])
+    with col3:
+        cvd_rate = (data_raw['CVD'].sum() / len(data_raw) * 100) if 'CVD' in data_raw.columns else 0
+        st.metric("CVD Rate", f"{cvd_rate:.1f}%")
+    
+    st.markdown("""
+    ### Key Variables
+    
+    Our analysis focuses on several categories of variables:
+    
+    - **Demographic**: Age, Sex
+    - **Behavioral**: Smoking status, cigarettes per day
+    - **Clinical Measurements**: Systolic and diastolic blood pressure, total cholesterol, BMI, heart rate, glucose
+    - **(Previous) Medical Conditions**: Diabetes, hypertension, previous heart conditions
+    - **Outcome**: Any kind of Cardiovascular Disease (CVD). This includes Myocardial infarction (Hospitalized and silent or unrecognized), Fatal Coronary Heart Disease, Atherothrombotic infarction, Cerebral Embolism, Intracerebral Hemorrhage, or Subarachnoid Hemorrhage or Fatal Cerebrovascular Disease.
+    
+    ### Expected Outcomes
+    
+    Through this analysis, we expect to:
+    
+    - Identify the most important risk factors for cardiovascular disease
+    - Develop accurate prediction models that can classify individuals as high or low risk
+    - Provide interpretable results that explain how different factors contribute to CVD risk
+    - Compare different modeling approaches to find the most effective method
+    """)
+    st.warning("Disclaimer: This project is not intended to diagnose or treat patients. It has not been validated clinically, and is prone to biases inherent in the dataset.")
+
 # Data Preprocessing Section
-if selected == 'Data Preprocessing':
+elif selected == 'Data Preprocessing':
     st.title("Data Preprocessing")
     
     st.markdown("""
