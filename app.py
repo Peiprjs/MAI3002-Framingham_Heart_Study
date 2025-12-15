@@ -535,10 +535,92 @@ if selected == 'Data Preprocessing':
     - Standardizes the transformed data
     - Reduces the impact of extreme values
     """)
-    st.header("8. Dropping leaking variables")
-    st.markdown("""text
-    
+
+    # Leaking Variables Drop
+    st.header("8. Dropping Leaking Variables")
+    st.markdown("""To ensure the model predicts **future risk** based on baseline characteristics, 
+    we must remove variables that represent events occurring *during* the study period
     """)
+    #Defining potential leakage columns
+    target_col = "CVD"
+    leakage_definitions = {
+        'ANYCHD': "Tracks if the patient had *any* Coronary Heart Disease during the study.",
+        'MI_FCHD': "Tracks Myocardial Infarction or Fatal CHD (a subset of CVD).",
+        'HOSPMI': "Tracks if patient was hospitalized for MI (implies CVD).",
+        'DEATH': "Tracks death during the study period (often caused by CVD).",
+        'STROKE': "Tracks stroke occurrence (highly correlated outcome).",
+        'CVD': "The Target Variable itself (obviously correlated 1.0)."
+    }
+    leakage_cols = list(leakage_definitions.keys())
+    vars_to_drop = [c for c in leakage_cols if c in data_raw.columns and c != 'CVD']
+    col1, col2 = st.columns([1, 1.5])
+
+    with col1:
+        st.subheader("Variables to Remove")
+        
+        if vars_to_drop:
+            st.warning(f"Removing {len(vars_to_drop)} future-outcome variables.")
+            
+            # Create a nice table for the list
+            # This replaces st.code for a cleaner look that matches the chart height better
+            df_display = pd.DataFrame({
+                'Variable': vars_to_drop,
+                'Definition': [leakage_definitions[v] for v in vars_to_drop]
+            })
+            st.dataframe(
+                df_display, 
+                hide_index=True, 
+                use_container_width=True,
+                column_config={
+                    "Variable": st.column_config.TextColumn("Variable", width="medium"),
+                    "Definition": st.column_config.TextColumn("Reason for Removal", width="large")
+                }
+            )
+        else:
+            st.success("No leakage variables found!")
+
+    with col2:
+        st.subheader("Why Leaking?")
+        vars_to_test = [c for c in leakage_cols if c != target_col]
+        if vars_to_drop and target_col in data_raw.columns:
+            # Calculate correlation against Target
+            # We filter the raw data for just these columns + Target
+            cols_to_test = vars_to_drop + [target_col]
+            corr_data = data_raw[cols_to_test].corr()[target_col].drop(target_col)
+
+            # Sort so the highest correlation is at the top, matching a logical list flow
+            corr_data = corr_data.sort_values(ascending=True)  # Ascending for Bar chart (plots bottom to top)
+
+            # Create Horizontal Bar Chart to match the vertical list in Col 1
+            fig_proof = px.bar(
+                x=corr_data.values,
+                y=corr_data.index,
+                orientation='h',
+                title=f"Correlation with {target_col}",
+                labels={'x': 'Correlation Strength', 'y': 'Variable'},
+                text_auto='.2f',
+                color=corr_data.values,
+                color_continuous_scale='Reds',
+                range_x=[0, 1]  # Fix range from 0 to 1 for context
+            )
+
+            fig_proof.update_layout(
+                height=300,  # Adjust height to align roughly with the dataframe in Col 1
+                yaxis=dict(title=None),  # Clean up y-axis title (redundant)
+                xaxis=dict(showgrid=True),
+                margin=dict(l=0, r=0, t=40, b=0),
+                showlegend=False,
+                coloraxis_showscale=False  # Hide color bar to save space
+            )
+
+            st.plotly_chart(fig_proof, width="stretch")
+
+        elif not vars_to_drop:
+            st.info("No variables to test.")
+        else:
+            st.warning(f"Target '{target_col}' missing. Cannot verify correlation.")
+
+
     # Feature Selection
     st.header("9. Feature Selection Methods")
     
