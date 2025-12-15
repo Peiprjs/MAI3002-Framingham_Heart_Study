@@ -554,115 +554,117 @@ if selected == 'Data Preprocessing':
     #Defining potential leakage columns
     target_col = "CVD"
     leakage_definitions = {
-        'ANYCHD': "Tracks if the patient had *any* Coronary Heart Disease during the study.",
-        'MI_FCHD': "Tracks Myocardial Infarction or Fatal CHD (a subset of CVD).",
-        'HOSPMI': "Tracks if patient was hospitalized for MI (implies CVD).",
-        'DEATH': "Tracks death during the study period (often caused by CVD).",
-        'STROKE': "Tracks stroke occurrence (highly correlated outcome).",
-        'CVD': "The Target Variable itself (obviously correlated 1.0)."
+    'ANYCHD': "Tracks if the patient had *any* Coronary Heart Disease during the study.",
+    'MI_FCHD': "Tracks Myocardial Infarction or Fatal CHD (a subset of CVD).",
+    'HOSPMI': "Tracks if patient was hospitalized for MI (implies CVD).",
+    'DEATH': "Tracks death during the study period (often caused by CVD).",
+    'STROKE': "Tracks stroke occurrence (highly correlated outcome).",
+    'PREVSTRK': "Previous Stroke (High correlation with CVD target).",
+    'PREVMI': "Previous Myocardial Infarction."
     }
-    leakage_cols = list(leakage_definitions.keys())
-    vars_to_drop = [c for c in leakage_cols if c in data_raw.columns and c != 'CVD']
-    col1, col2 = st.columns([1, 2.5])
 
-    with col1:
+    #Leakage analysis
+    if target_col in data_raw.columns:
+    
+        certainty_data = []
+
+        for var in binary_cols:
+            # Look only at patients where this event HAPPENED (Value = 1)
+            subset_patients = data_raw[data_raw[var] == 1]
+
+            if len(subset_patients) > 0:
+                # Calculate % of these patients who have CVD
+                prob_cvd = subset_patients[target_col].mean()
+            else:
+                prob_cvd = 0.0
+
+            certainty_data.append({'Variable': var, 'Certainty': prob_cvd})
+
+        certainty_df = pd.DataFrame(certainty_data).sort_values(by='Certainty', ascending=False)
+        certainty_df = certainty_df[certainty_df['Variable'] != target_col]
+        high_leakage_vars = certainty_df[certainty_df['Certainty'] > 0.9]['Variable'].tolist()
+        hardcoded_drops = [c for c in leakage_definitions.keys() if c in data_raw.columns and c != target_col]
+        final_vars_to_drop = list(set(high_leakage_vars + hardcoded_drops))
+
+        #Plotting leakage
+
+        st.subheader("Analysis: Leakage Certainty Test")
+
+        # Color logic: Red for >90%, Blue for others
+        certainty_df['Type'] = certainty_df['Certainty'].apply(
+            lambda x: 'Definite Leakage (>90%)' if x > 0.9 else 'Risk Factor / Correlation'
+        )
+
+        fig_proof = px.bar(
+            certainty_df,
+            x='Certainty',
+            y='Variable',
+            orientation='h',
+            title=f"Probability of {target_col}=1 given Variable=1",
+            text_auto='.0%',
+            color='Type',
+            color_discrete_map={
+                'Definite Leakage (>90%)': '#8B0000',  # Dark Red
+                'Risk Factor / Correlation': '#FFA07A'  # Light Salmon/Orange
+            },
+            range_x=[0, 1.15]
+        )
+
+        fig_proof.update_layout(
+            height=500,
+            yaxis=dict(title=None, categoryorder='total ascending', automargin=True),
+            xaxis=dict(
+                tickformat=".0%",
+                title="Conditional Probability",
+                tickvals=[0, 0.5, 0.9, 1]  # Show the 90% threshold on axis
+            ),
+            legend=dict(orientation="h", y=1.1, x=0),
+            coloraxis_showscale=False,
+            margin=dict(l=0, r=0, t=40, b=0)
+        )
+
+        # Threshold Line
+        fig_proof.add_vline(
+            x=0.9,
+            line_dash="dash",
+            line_color="black",
+            annotation_text="Leakage Threshold (90%)",
+            annotation_position="bottom right"
+        )
+
+        st.plotly_chart(fig_proof, width="stretch")
+
         st.subheader("Variables to Remove")
-        
-        if vars_to_drop:
-            st.warning(f"Removing {len(vars_to_drop)} future-outcome variables.")
-            
-            # Create a nice table for the list
-            # This replaces st.code for a cleaner look that matches the chart height better
-            df_display = pd.DataFrame({
-                'Variable': vars_to_drop,
-                'Definition': [leakage_definitions[v] for v in vars_to_drop]
-            })
+        high_certainty_df = certainty_df[certainty_df['Certainty'] > 0.9].copy()
+
+        if not high_certainty_df.empty:
+            st.warning(f"Detected {len(high_certainty_df)} variables with >90% certainty. These are removed.")
+
+            # Add definitions dynamically
+            high_certainty_df['Definition'] = high_certainty_df['Variable'].apply(
+                lambda x: leakage_definitions.get(x, "Detected High Certainty Leakage")
+            )
+
+            # Display clean table
             st.dataframe(
-                df_display, 
-                hide_index=True, 
+                high_certainty_df[['Variable', 'Certainty', 'Definition']],
+                hide_index=True,
                 use_container_width=True,
                 column_config={
-                    "Variable": st.column_config.TextColumn("Variable", width="medium"),
-                    "Definition": st.column_config.TextColumn("Reason for Removal", width="large")
+                    "Variable": st.column_config.TextColumn("Variable", width="small"),
+                    "Certainty": st.column_config.NumberColumn("Certainty", format="%.2f", width="small"),
+                    "Definition": st.column_config.TextColumn("Definition", width="large")
                 }
             )
         else:
-            st.success("No leakage variables found!")
+            st.info("No variables exceeded the 90% certainty threshold.")
+        other_drops = [v for v in final_vars_to_drop if v not in high_certainty_df['Variable'].tolist()]
+        if other_drops:
+            st.info(
+                f"Note: {len(other_drops)} other variables (like {', '.join(other_drops[:3])}) were also removed based on manual definitions.")
 
-    with col2:
-        st.subheader("Why Leaking?")
-        if vars_to_drop and target_col in data_raw.columns:
-
-            certainty_data = []
-
-            for var in binary_cols:
-                # Look only at patients where this event HAPPENED (Value = 1)
-                subset_patients = data_raw[data_raw[var] == 1]
-
-
-                if len(subset_patients) > 0:
-                    # Calculate % of these patients who have CVD
-                    prob_cvd = subset_patients[target_col].mean()
-                else:
-                    prob_cvd = 0.0
-
-                certainty_data.append({'Variable': var, 'Certainty': prob_cvd})
-            certainty_df = pd.DataFrame(certainty_data).sort_values(by='Certainty', ascending=False)
-
-            certainty_df['Type'] = certainty_df['Variable'].apply(
-                lambda x: 'Leakage (Dropped)' if x in vars_to_drop or x == target_col else 'Valid Risk Factor'
-            )
-
-            # Plot
-            fig_proof = px.bar(
-                certainty_df,
-                x='Certainty',
-                y='Variable',
-                orientation='h',
-                title=f"Probability of {target_col} given Variable=1",
-                text_auto='.0%',
-                color='Certainty',
-                color_continuous_scale='Reds',
-                range_x=[0, 1.1]
-            )
-
-            fig_proof.update_layout(
-                height=500,
-                yaxis=dict(title=None, categoryorder='total ascending',
-                    automargin=True),
-                xaxis=dict(
-                    tickformat=".0%",
-                    title="Conditional Probability",
-                    tickvals=[0, 0.5, 1]
-                ),
-                legend=dict(orientation="h", y=1.1, x=0),
-                coloraxis_showscale=False,
-                margin=dict(l=0, r=0, t=40, b=0)
-            )
-
-            # Add a red line at 100% to emphasize the "Cheating" limit
-            fig_proof.add_vline(
-                x=0.9,
-                line_dash="dash",
-                line_color="black",
-                annotation_text="Definite Leakage (>90%)",
-                annotation_position="bottom left",  # Anchors text to the left of the line at the top
-                annotation_font_size=14,
-                annotation_font_color="black"
-            )
-
-            st.plotly_chart(fig_proof, width="stretch")
-
-            st.info("""
-                    **How to read this:**
-                    * **100%** means: "If a patient has this, they **definitely** have CVD."
-                    * This proves these variables contain "future knowledge" of the target.
-                    """)
-
-        elif not vars_to_drop:
-            st.info("No variables to test.")
-        else:
-            st.warning(f"Target '{target_col}' missing.")
+    else:
+        st.warning(f"Target '{target_col}' missing.")
 
 
     # Feature Selection
