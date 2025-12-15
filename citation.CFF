@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: "Roca Cugat" 
+    given-names: "Mar"
+  - family-names: "Záboj" 
+    given-names: "Jakub"
+title: "MAI3002-Framingham_Heart_Study"
+version: "1.0.0" 
+date-released: "2025-12-15"
+url: "https://github.com/Peiprjs/MAI3002-Framingham_Heart_Study"
+repository-code: "https://github.com/Peiprjs/MAI3002-Framingham_Heart_Study"
+type: "software"
+keywords:
+  - "framingham"
+  - "heart-study"
+  - "machine-learning"
