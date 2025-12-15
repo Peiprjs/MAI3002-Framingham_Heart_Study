@@ -47,3 +47,5 @@ If you use this project in your research, please cite:
   url = {https://github.com/peipr-access/MAI3002-Framingham_Heart_Study}
 }
 ```
+
+> Good luck, little code. I therefore sail ship to this code, never to be touched again. I hope your voyage across the sea of demoing is calm and deovoid of bugs and other integration hell beasts.
