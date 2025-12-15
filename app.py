@@ -584,7 +584,10 @@ if selected == 'Data Preprocessing':
         certainty_df = certainty_df[certainty_df['Variable'] != target_col]
         high_leakage_vars = certainty_df[certainty_df['Certainty'] > 0.9]['Variable'].tolist()
         hardcoded_drops = [c for c in leakage_definitions.keys() if c in data_raw.columns and c != target_col]
-        final_vars_to_drop = list(set(high_leakage_vars + hardcoded_drops))
+        final_vars_to_drop = list(set(high_leakage_vars))
+        if final_vars_to_drop:
+            # 1. Save to Session State
+            st.session_state['leakage_vars'] = final_vars_to_drop
 
         #Plotting leakage
 
@@ -658,10 +661,6 @@ if selected == 'Data Preprocessing':
             )
         else:
             st.info("No variables exceeded the 90% certainty threshold.")
-        other_drops = [v for v in final_vars_to_drop if v not in high_certainty_df['Variable'].tolist()]
-        if other_drops:
-            st.info(
-                f"Note: {len(other_drops)} other variables (like {', '.join(other_drops[:3])}) were also removed based on manual definitions.")
 
     else:
         st.warning(f"Target '{target_col}' missing.")
@@ -991,7 +990,19 @@ elif selected == 'Machine Learning Results':
         CategoryColumn = 'CVD'
         X = data_raw.drop(columns=[CategoryColumn])
         time_cols = [col for col in X.columns if col.startswith('TIME')]
-        X = X.drop(columns=time_cols)
+        X = X.drop(columns=time_cols) #Drop time columns
+
+        #Drop Leakage Columns
+        if 'leakage_vars' in st.session_state:
+            # Use the list calculated in the Preprocessing Tab
+            leakage_cols = st.session_state['leakage_vars']
+        else:
+            # Fallback if user skipped the Preprocessing tab
+            leakage_cols = ['MI_FCHD', 'HOSPMI', 'STROKE', 'PREVSTRK', 'PREVMI']
+            st.warning("Preprocessing tab not visited. Using default leakage list.")
+
+        X = X.drop(columns= [c for c in leakage_cols if c in X.columns])
+
         y = data_raw[CategoryColumn]
         
         # Train-test split (80-20) with stratification
