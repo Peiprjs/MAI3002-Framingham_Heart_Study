@@ -1066,7 +1066,7 @@ elif selected == 'Machine Learning Results':
             X_train_corrected = X
             # Generate seeds for robust feature selection
             rng = np.random.RandomState(seed=2025)
-            seeds = rng.randint(low=0, high=10000, size=12)
+            seeds = rng.randint(low=0, high=10000, size=7)
             
             votes = np.zeros(X_train_corrected.shape[1], dtype=int)
             
