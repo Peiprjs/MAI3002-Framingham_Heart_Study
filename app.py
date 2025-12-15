@@ -650,21 +650,17 @@ elif selected == 'Data Preprocessing':
     #Defining potential leakage columns
     target_col = "CVD"
     leakage_definitions = {
-    'ANYCHD': "Tracks if the patient had *any* Coronary Heart Disease during the study.",
+    'ANYCHD': "Tracks if the patient had any Coronary Heart Disease during the study (a subset of CVD).",
     'MI_FCHD': "Tracks Myocardial Infarction or Fatal CHD (a subset of CVD).",
-    'HOSPMI': "Tracks if patient was hospitalized for MI (implies CVD).",
-    'DEATH': "Tracks death during the study period (often caused by CVD).",
-    'STROKE': "Tracks stroke occurrence (highly correlated outcome).",
-    'PREVSTRK': "Previous Stroke (High correlation with CVD target).",
-    'PREVMI': "Previous Myocardial Infarction."
+    'HOSPMI': "Tracks if patient was hospitalized for MI (could be CVD).",
+    'DEATH': "Tracks death during the study period (could be caused by CVD).",
+    'STROKE': "Tracks stroke occurrence (a subset of CVD).",
     }
-
+    leaky_variables = list(leakage_definitions.keys())
     #Leakage analysis
     if target_col in data_raw.columns:
-    
         certainty_data = []
-
-        for var in binary_cols:
+        for var in leaky_variables:
             # Look only at patients where this event HAPPENED (Value = 1)
             subset_patients = data_raw[data_raw[var] == 1]
 
@@ -678,7 +674,7 @@ elif selected == 'Data Preprocessing':
 
         certainty_df = pd.DataFrame(certainty_data).sort_values(by='Certainty', ascending=False)
         certainty_df = certainty_df[certainty_df['Variable'] != target_col]
-        high_leakage_vars = certainty_df[certainty_df['Certainty'] > 0.9]['Variable'].tolist()
+        high_leakage_vars = certainty_df[certainty_df['Certainty'] > 0.85]['Variable'].tolist()
         hardcoded_drops = [c for c in leakage_definitions.keys() if c in data_raw.columns and c != target_col]
         final_vars_to_drop = list(set(high_leakage_vars))
         if final_vars_to_drop:
@@ -689,9 +685,8 @@ elif selected == 'Data Preprocessing':
 
         st.subheader("Analysis: Leakage Certainty Test")
 
-        # Color logic: Red for >90%, Blue for others
         certainty_df['Type'] = certainty_df['Certainty'].apply(
-            lambda x: 'Definite Leakage (>90%)' if x > 0.9 else 'Risk Factor / Correlation'
+            lambda x: 'Definite Leakage (>85%)' if x > 0.85 else 'Risk Factor / Correlation'
         )
 
         fig_proof = px.bar(
@@ -703,7 +698,7 @@ elif selected == 'Data Preprocessing':
             text_auto='.0%',
             color='Type',
             color_discrete_map={
-                'Definite Leakage (>90%)': '#8B0000',  # Dark Red
+                'Definite Leakage (>85%)': '#8B0000',  # Dark Red
                 'Risk Factor / Correlation': '#FFA07A'  # Light Salmon/Orange
             },
             range_x=[0, 1.15]
@@ -715,19 +710,18 @@ elif selected == 'Data Preprocessing':
             xaxis=dict(
                 tickformat=".0%",
                 title="Conditional Probability",
-                tickvals=[0, 0.5, 0.9, 1]  # Show the 90% threshold on axis
+                tickvals=[0, 0.5, 0.85, 1]
             ),
-            legend=dict(orientation="h", y=1.1, x=0),
             coloraxis_showscale=False,
             margin=dict(l=0, r=0, t=40, b=0)
         )
 
         # Threshold Line
         fig_proof.add_vline(
-            x=0.9,
+            x=0.85,
             line_dash="dash",
             line_color="black",
-            annotation_text="Leakage Threshold (90%)",
+            annotation_text="Leakage Threshold (85%)",
             annotation_position="bottom right"
         )
 
@@ -737,7 +731,8 @@ elif selected == 'Data Preprocessing':
         high_certainty_df = certainty_df[certainty_df['Certainty'] > 0.9].copy()
 
         if not high_certainty_df.empty:
-            st.warning(f"Detected {len(high_certainty_df)} variables with >90% certainty. These are removed.")
+            st.warning(f"The following variables will be removed.")
+            high_certainty_df = certainty_df[certainty_df['Certainty'] > 0.5].copy()
 
             # Add definitions dynamically
             high_certainty_df['Definition'] = high_certainty_df['Variable'].apply(
@@ -757,10 +752,8 @@ elif selected == 'Data Preprocessing':
             )
         else:
             st.info("No variables exceeded the 90% certainty threshold.")
-
     else:
         st.warning(f"Target '{target_col}' missing.")
-
 
     # Feature Selection
     st.header("9. Feature Selection Methods")
@@ -1089,13 +1082,7 @@ elif selected == 'Machine Learning Results':
         X = X.drop(columns=time_cols) #Drop time columns
 
         #Drop Leakage Columns
-        if 'leakage_vars' in st.session_state:
-            # Use the list calculated in the Preprocessing Tab
-            leakage_cols = st.session_state['leakage_vars']
-        else:
-            # Fallback if user skipped the Preprocessing tab
-            leakage_cols = ['MI_FCHD', 'HOSPMI', 'STROKE', 'PREVSTRK', 'PREVMI']
-            st.warning("Preprocessing tab not visited. Using default leakage list.")
+        leakage_cols = ['MI_FCHD', 'HOSPMI', 'STROKE', 'ANYCHD', 'DEATH']
 
         X = X.drop(columns= [c for c in leakage_cols if c in X.columns])
 
