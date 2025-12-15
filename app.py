@@ -1056,7 +1056,7 @@ elif selected == 'Machine Learning Results':
             "Select Number of Top Features to Keep",
             min_value=5,
             max_value=12,
-            value=10,
+            value=9,
             step=1,
             help="Choose how many top predictors the RFE algorithm should select."
         )
