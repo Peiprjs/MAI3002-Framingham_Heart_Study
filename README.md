@@ -1,8 +1,2 @@
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/Peiprjs/MAI3002_project/HEAD?urlpath=%2Fdoc%2Ftree%2FCode.ipynb)\
 [![DOI](https://zenodo.org/badge/1083256166.svg)](https://doi.org/10.5281/zenodo.17462955)\
-
-## TODO
-- Move imputation before splitting (M)
-- ⁠Logistic regression model (K)
-- ⁠Feature selection (K)
-- ⁠Random forest with crossval (M)
