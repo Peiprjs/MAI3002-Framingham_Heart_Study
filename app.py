@@ -1,25 +1,44 @@
-import pandas as pd
+import warnings
+from io import StringIO
+import sys
+
 import numpy as np
+import pandas as pd
+
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import streamlit as st
-from sklearn.preprocessing import PowerTransformer
-from streamlit_option_menu import option_menu
+import seaborn as sns
+import matplotlib.pyplot as plt
+
 from scipy import stats
+from sklearn.preprocessing import PowerTransformer
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
-from processing_functions import train_test_imputation, apply_skewness_correction
 from sklearn.linear_model import LogisticRegression
 from sklearn.feature_selection import RFE
-import seaborn as sns
-import warnings
-import matplotlib.pyplot as plt
+from sklearn.metrics import (
+    accuracy_score,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score
+)
 
-from imputation_functions import drop_high_missing_cols, knn_impute, impute_simple_central
+import shap
+from streamlit_shap import st_shap
+
+import streamlit as st
+from streamlit_option_menu import option_menu
+
+from processing_functions import train_test_imputation, apply_skewness_correction
 from functions import distplots
+from imputation_functions import (
+    drop_high_missing_cols,
+    knn_impute,
+    impute_simple_central
+)
 
 st.set_page_config(layout="wide", page_title="Framingham Heart Study")
 
@@ -625,6 +644,7 @@ elif selected == 'Exploratory Data Analysis':
 
     # Select numeric columns for visualization
     numeric_cols = data_to_use.select_dtypes(include=['number']).columns.tolist()
+    numeric_cols.remove("RANDID")
     selected_col = st.selectbox("Select a variable to visualize", numeric_cols)
 
     # Create histogram
@@ -651,7 +671,9 @@ elif selected == 'Exploratory Data Analysis':
     st.plotly_chart(fig, width="stretch")
 
     # Box-whisker plot selector: all variables or selected variable
-    box_scope = st.selectbox("Show box-whisker plot for", ["All numeric variables", "Selected variable"], index=0)
+
+    options = ["All numeric variables"] + numeric_cols
+    box_scope = st.selectbox("Show box-whisker plot for", options, index=0)
 
     if box_scope == "All numeric variables":
         # Convert to long form and plot one box per numeric variable
@@ -733,7 +755,7 @@ elif selected == 'Statistical Analysis':
     
     st.markdown("""
     This section presents the statistical analysis results for the key research questions 
-    about cardiovascular disease risk factors.
+    about cardiovascular disease risk factors. This was used for the first project presentation, as well as a preliminary exploration of the data.
     """)
     
     # Research Question 1: Cholesterol and Smoking
@@ -1235,9 +1257,39 @@ class_weight: {class_weight_rf}""")
         best_model = comparison_df.iloc[best_model_idx]['Model']
         best_f1 = comparison_df.iloc[best_model_idx]['F1 Score']
         
-        st.success(f"🏆 Best Model: **{best_model}** with F1 Score of **{best_f1:.4f}**")
+        st.success(f"Best Model: **{best_model}** with F1 Score of **{best_f1:.4f}**")
     else:
         st.warning("CVD column not available in the dataset for machine learning analysis.")
+
+    st.header("5. SHAP analysis for selected logistic regression model")
+    st.markdown("""
+    SHAP (SHapley Additive exPlanations) values explain how each feature contributes 
+    to individual predictions, helping us understand the model's decision-making process. This happens due to magic.
+    """)
+
+    with st.spinner("Calculating SHAP values..."):
+        # Initialize SHAP explainer for Logistic Regression
+        explainer = shap.LinearExplainer(lr_selected, X_train_selected)
+        shap_values = explainer.shap_values(X_test_selected)
+        explanation = explainer(X_train_selected)
+
+        st.subheader("SHAP Beeswarm Plot")
+        st_shap(shap.plots.beeswarm(explanation))
+
+        st.subheader("Individual Prediction Explanation")
+        sample_idx = st.slider("Select a test sample to explain", 0, len(X_test_selected) - 1, 0)
+
+        st_shap(shap.force_plot(explainer.expected_value,
+                        shap_values[sample_idx, :],
+                        X_test_selected.iloc[sample_idx, :],
+                        show=False))
+
+        st.subheader("Feature Contribution Waterfall")
+        st_shap(shap.plots._waterfall.waterfall_legacy(explainer.expected_value,
+                                               shap_values[sample_idx, :],
+                                               X_test_selected.iloc[sample_idx, :],
+                                               show=False))
+
 
 # Conclusion Section
 elif selected == 'Conclusion':

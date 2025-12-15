@@ -7,3 +7,4 @@ scipy
 seaborn
 matplotlib
 streamlit-option-menu
+streamlit-shap
