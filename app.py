@@ -106,7 +106,21 @@ elif selected == 'Data Preprocessing':
     This section describes the data preprocessing pipeline used to prepare 
     the Framingham Heart Study dataset for analysis and machine learning.
     """)
-    
+
+    # Train-Test Split Strategy
+    st.header("0. Train-Test Split Strategy")
+
+    st.markdown("""
+        To prevent data leakage, the preprocessing pipeline follows a strict order:
+        """)
+
+    st.code("""
+    1. Split data (80% train, 20% test) with stratification
+    2. Learn imputation parameters from TRAINING set only
+    3. Apply learned parameters to both train and test sets
+    4. Transform features (skewness correction) on train, then test
+    5. Select features based on training set performance""", language="text")
+
     # Missing Data Analysis
     st.header("1. Missing Data Analysis")
     
@@ -561,21 +575,7 @@ elif selected == 'Data Preprocessing':
         **Benefit:** Improves model interpretability
         """)
     
-    # Train-Test Split Strategy
-    st.header("9. Train-Test Split Strategy")
-    
-    st.markdown("""
-    To prevent data leakage, the preprocessing pipeline follows a strict order:
-    """)
-    
-    st.code("""
-1. Split data (80% train, 20% test) with stratification
-2. Learn imputation parameters from TRAINING set only
-3. Apply learned parameters to both train and test sets
-4. Transform features (skewness correction) on train, then test
-5. Select features based on training set performance
-    """, language="text")
-    
+
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -584,35 +584,25 @@ elif selected == 'Data Preprocessing':
         st.metric("Test Set", "20%")
     with col3:
         st.metric("Stratification", "By CVD outcome")
-    
+
     # Summary
-    st.header("9. Preprocessing Pipeline Summary")
-    
-    st.markdown("""
-    The complete preprocessing pipeline ensures:
-    - **No data leakage** between train and test sets
-    - **Appropriate handling** of different types of missingness
-    - **Distribution normalization** for better model performance
-    - **Feature redundancy reduction** through correlation analysis
-    - **Optimal feature selection** using RFE
-    """)
-    
+
     # Create a flow diagram
     st.subheader("Preprocessing Flow")
-    
+
     preprocessing_steps = pd.DataFrame({
-        'Step': ['1. Load Data', '2. Train-Test Split', '3. Drop Columns (>50% missing)', 
-                '4. KNN Imputation (2-50%)', '5. Simple Imputation (<2%)', 
+        'Step': ['1. Load Data', '2. Train-Test Split', '3. Drop Columns (>50% missing)',
+                '4. KNN Imputation (2-50%)', '5. Simple Imputation (<2%)',
                 '6. Skewness Correction', '7. Correlation Filter', '8. Feature Selection (RFE)'],
         'Purpose': ['Load raw dataset', 'Stratified 80-20 split', 'Remove low-information features',
-                   'Predict moderate missingness', 'Fill minimal missingness', 
+                   'Predict moderate missingness', 'Fill minimal missingness',
                    'Normalize distributions', 'Remove redundancy', 'Select best predictors'],
-        'Output': [f'{data_raw.shape[0]} rows, {data_raw.shape[1]} cols', 
+        'Output': [f'{data_raw.shape[0]} rows, {data_raw.shape[1]} cols',
                   'Separate train/test', f'{data_raw.shape[1] - len(high_missing_cols)} cols',
                   'Complete train/test', 'No missing values',
                   'Normalized features', 'Reduced feature set', 'Final feature set']
     })
-    
+
     st.dataframe(preprocessing_steps, width="stretch", hide_index=True)
 
 # Data Overview Section
@@ -959,7 +949,9 @@ elif selected == 'Machine Learning Results':
             
             accuracy_selected = accuracy_score(Y_test, y_pred_selected)
             f1_selected = f1_score(Y_test, y_pred_selected)
-            
+            precision_selected = precision_score(Y_test, y_pred_selected)
+            recall_selected = recall_score(Y_test, y_pred_selected)
+
             st.metric("Accuracy", f"{accuracy_selected:.4f}", 
                      delta=f"{accuracy_selected - accuracy_baseline:.4f}")
             st.metric("F1 Score", f"{f1_selected:.4f}",
@@ -1002,7 +994,7 @@ elif selected == 'Machine Learning Results':
                                        title='Confusion Matrix - Selected Features',
                                        color_continuous_scale='Blues')
             st.plotly_chart(fig_cm_selected, width="stretch")
-        
+        st.header("2. Decision Tree Classifier")
         # Correlation-based feature reduction
         st.subheader("Correlation-Based Feature Reduction")
         
@@ -1025,18 +1017,12 @@ elif selected == 'Machine Learning Results':
             
             f1_corr = f1_score(Y_test, y_pred_corr)
             accuracy_corr = accuracy_score(Y_test, y_pred_corr)
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Accuracy (Corr. Reduced)", f"{accuracy_corr:.4f}")
-            with col2:
-                st.metric("F1 Score (Corr. Reduced)", f"{f1_corr:.4f}")
+
         else:
             st.success("No features exceed the correlation threshold.")
         
         # Decision Tree
-        st.header("2. Decision Tree Classifier")
-        
+
         col1, col2 = st.columns(2)
         
         with col1:
@@ -1048,9 +1034,14 @@ elif selected == 'Machine Learning Results':
             accuracy_dt = accuracy_score(Y_test, y_pred_dt)
             f1_dt = f1_score(Y_test, y_pred_dt)
             
-            st.metric("Accuracy", f"{accuracy_dt:.4f}")
-            st.metric("F1 Score", f"{f1_dt:.4f}")
-            
+            st.metric("Accuracy", f"{accuracy_dt:.4f}",
+                     delta=f"{accuracy_dt - accuracy_selected:.4f}")
+
+            st.metric("F1 Score", f"{f1_dt:.4f}",
+                    delta = f"{f1_dt - f1_selected:.4f}")
+
+
+
             # Feature importance
             feature_importance_dt = pd.DataFrame({
                 'Feature': X_train_corrected.columns,
@@ -1080,11 +1071,6 @@ elif selected == 'Machine Learning Results':
         # Random Forest with Hyperparameter Tuning
         st.header("3. Random Forest Classifier with Hyperparameter Tuning")
         
-        st.markdown("""
-        Random Forest is an ensemble method that builds multiple decision trees and combines 
-        their predictions. Experiment with different hyperparameters to find the optimal configuration.
-        """)
-        
         # Hyperparameter controls
         col1, col2, col3 = st.columns(3)
         
@@ -1093,7 +1079,7 @@ elif selected == 'Machine Learning Results':
                 "Number of Trees (n_estimators)",
                 min_value=10,
                 max_value=500,
-                value=100,
+                value=250,
                 step=10,
                 help="Number of trees in the forest. More trees generally improve performance but increase computation time."
             )
@@ -1113,7 +1099,7 @@ elif selected == 'Machine Learning Results':
                 "Min Samples Split",
                 min_value=2,
                 max_value=20,
-                value=2,
+                value=5,
                 step=1,
                 help="Minimum number of samples required to split an internal node."
             )
@@ -1125,7 +1111,7 @@ elif selected == 'Machine Learning Results':
                 "Min Samples Leaf",
                 min_value=1,
                 max_value=20,
-                value=1,
+                value=6,
                 step=1,
                 help="Minimum number of samples required at a leaf node."
             )
@@ -1170,9 +1156,13 @@ elif selected == 'Machine Learning Results':
             
             with col1:
                 st.subheader("Model Performance")
-                st.metric("Accuracy", f"{accuracy_rf:.4f}")
-                st.metric("F1 Score", f"{f1_rf:.4f}")
-                
+                st.metric("Accuracy", f"{accuracy_rf:.4f}", delta=f"{accuracy_rf - accuracy_selected:.4f}")
+                st.metric("F1 Score", f"{f1_rf:.4f}", delta=f"{f1_rf - f1_selected:.4f}")
+                precision_rf = precision_score(Y_test, y_pred_rf)
+                recall_rf = recall_score(Y_test, y_pred_rf)
+                st.metric("Recall", f"{recall_rf:.4f}", delta=f"{recall_rf - recall_selected:.4f}")
+                st.metric("Precision", f"{precision_rf:.4f}", delta=f"{precision_rf - precision_selected:.4f}")
+
                 # Hyperparameters used
                 st.subheader("Hyperparameters Used")
                 st.code(f"""n_estimators: {n_estimators}
@@ -1183,20 +1173,6 @@ max_features: {max_features}
 class_weight: {class_weight_rf}""")
                 
                 # Feature importance
-                feature_importance_rf = pd.DataFrame({
-                    'Feature': X_train_corrected.columns,
-                    'Importance': rf_model.feature_importances_
-                }).sort_values('Importance', ascending=False)
-                
-                st.subheader("Top 10 Important Features")
-                fig_importance_rf = px.bar(feature_importance_rf.head(10), 
-                                          x='Importance', y='Feature',
-                                          orientation='h',
-                                          title='Feature Importance',
-                                          color='Importance',
-                                          color_continuous_scale='Viridis')
-                st.plotly_chart(fig_importance_rf, width="stretch")
-            
             with col2:
                 # Confusion matrix
                 cm_rf = confusion_matrix(Y_test, y_pred_rf)
@@ -1209,27 +1185,21 @@ class_weight: {class_weight_rf}""")
                                      title='Confusion Matrix - Random Forest',
                                      color_continuous_scale='Oranges')
                 st.plotly_chart(fig_cm_rf, width="stretch")
-                
-                # Additional metrics
-                st.subheader("Detailed Metrics")
-                
-                precision_rf = precision_score(Y_test, y_pred_rf)
-                recall_rf = recall_score(Y_test, y_pred_rf)
-                
-                metrics_df = pd.DataFrame({
-                    'Metric': ['Accuracy', 'Precision', 'Recall', 'F1 Score'],
-                    'Score': [accuracy_rf, precision_rf, recall_rf, f1_rf]
-                })
-                
-                fig_metrics = px.bar(metrics_df, x='Metric', y='Score',
-                                    title='Performance Metrics',
-                                    color='Score',
-                                    color_continuous_scale='Blues',
-                                    text='Score')
-                fig_metrics.update_traces(texttemplate='%{text:.3f}', textposition='outside')
-                fig_metrics.update_layout(showlegend=False, height=350)
-                st.plotly_chart(fig_metrics, width="stretch")
-            
+
+                feature_importance_rf = pd.DataFrame({
+                    'Feature': X_train_corrected.columns,
+                    'Importance': rf_model.feature_importances_
+                }).sort_values('Importance', ascending=False)
+
+                st.subheader("Top 10 Important Features")
+                fig_importance_rf = px.bar(feature_importance_rf.head(10),
+                                           x='Importance', y='Feature',
+                                           orientation='h',
+                                           title='Feature Importance',
+                                           color='Importance',
+                                           color_continuous_scale='Viridis')
+                st.plotly_chart(fig_importance_rf, width="stretch")
+
             # Store results for comparison
             st.session_state['rf_accuracy'] = accuracy_rf
             st.session_state['rf_f1'] = f1_rf
