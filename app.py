@@ -563,7 +563,7 @@ if selected == 'Data Preprocessing':
     }
     leakage_cols = list(leakage_definitions.keys())
     vars_to_drop = [c for c in leakage_cols if c in data_raw.columns and c != 'CVD']
-    col1, col2 = st.columns([1, 1.5])
+    col1, col2 = st.columns([1, 2.5])
 
     with col1:
         st.subheader("Variables to Remove")
@@ -591,44 +591,78 @@ if selected == 'Data Preprocessing':
 
     with col2:
         st.subheader("Why Leaking?")
-        vars_to_test = [c for c in leakage_cols if c != target_col]
         if vars_to_drop and target_col in data_raw.columns:
-            # Calculate correlation against Target
-            # We filter the raw data for just these columns + Target
-            cols_to_test = vars_to_drop + [target_col]
-            corr_data = data_raw[cols_to_test].corr()[target_col].drop(target_col)
 
-            # Sort so the highest correlation is at the top, matching a logical list flow
-            corr_data = corr_data.sort_values(ascending=True)  # Ascending for Bar chart (plots bottom to top)
+            certainty_data = []
 
-            # Create Horizontal Bar Chart to match the vertical list in Col 1
+            for var in binary_cols:
+                # Look only at patients where this event HAPPENED (Value = 1)
+                subset_patients = data_raw[data_raw[var] == 1]
+
+
+                if len(subset_patients) > 0:
+                    # Calculate % of these patients who have CVD
+                    prob_cvd = subset_patients[target_col].mean()
+                else:
+                    prob_cvd = 0.0
+
+                certainty_data.append({'Variable': var, 'Certainty': prob_cvd})
+            certainty_df = pd.DataFrame(certainty_data).sort_values(by='Certainty', ascending=False)
+
+            certainty_df['Type'] = certainty_df['Variable'].apply(
+                lambda x: 'Leakage (Dropped)' if x in vars_to_drop or x == target_col else 'Valid Risk Factor'
+            )
+
+            # Plot
             fig_proof = px.bar(
-                x=corr_data.values,
-                y=corr_data.index,
+                certainty_df,
+                x='Certainty',
+                y='Variable',
                 orientation='h',
-                title=f"Correlation with {target_col}",
-                labels={'x': 'Correlation Strength', 'y': 'Variable'},
-                text_auto='.2f',
-                color=corr_data.values,
+                title=f"Probability of {target_col} given Variable=1",
+                text_auto='.0%',
+                color='Certainty',
                 color_continuous_scale='Reds',
-                range_x=[0, 1]  # Fix range from 0 to 1 for context
+                range_x=[0, 1.1]
             )
 
             fig_proof.update_layout(
-                height=300,  # Adjust height to align roughly with the dataframe in Col 1
-                yaxis=dict(title=None),  # Clean up y-axis title (redundant)
-                xaxis=dict(showgrid=True),
-                margin=dict(l=0, r=0, t=40, b=0),
-                showlegend=False,
-                coloraxis_showscale=False  # Hide color bar to save space
+                height=500,
+                yaxis=dict(title=None, categoryorder='total ascending',
+                    automargin=True),
+                xaxis=dict(
+                    tickformat=".0%",
+                    title="Conditional Probability",
+                    tickvals=[0, 0.5, 1]
+                ),
+                legend=dict(orientation="h", y=1.1, x=0),
+                coloraxis_showscale=False,
+                margin=dict(l=0, r=0, t=40, b=0)
+            )
+
+            # Add a red line at 100% to emphasize the "Cheating" limit
+            fig_proof.add_vline(
+                x=0.9,
+                line_dash="dash",
+                line_color="black",
+                annotation_text="Definite Leakage (>90%)",
+                annotation_position="bottom left",  # Anchors text to the left of the line at the top
+                annotation_font_size=14,
+                annotation_font_color="black"
             )
 
             st.plotly_chart(fig_proof, width="stretch")
 
+            st.info("""
+                    **How to read this:**
+                    * **100%** means: "If a patient has this, they **definitely** have CVD."
+                    * This proves these variables contain "future knowledge" of the target.
+                    """)
+
         elif not vars_to_drop:
             st.info("No variables to test.")
         else:
-            st.warning(f"Target '{target_col}' missing. Cannot verify correlation.")
+            st.warning(f"Target '{target_col}' missing.")
 
 
     # Feature Selection
