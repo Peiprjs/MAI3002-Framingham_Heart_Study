@@ -1236,7 +1236,7 @@ elif selected == 'Machine Learning Results':
         """)
         
         with st.expander("View Decision Tree Structure (may be large)", expanded=False):
-            st.warning("Note: The tree visualization can be very large and may take time to render. It shows the complete decision path from root to all leaf nodes. For very deep trees, consider limiting max_depth during model training.")
+            st.warning("Note: The tree visualization can be very large and may take time to render. It shows the complete decision path from root to all leaf nodes.")
             
             fig_tree, ax = plt.subplots(figsize=(50, 20))
             tree.plot_tree(dt_model, ax=ax, impurity=False, 
