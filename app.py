@@ -1290,7 +1290,30 @@ class_weight: {class_weight_rf}""")
                                                X_test_selected.iloc[sample_idx, :],
                                                show=False))
 
+    st.header("6. SHAP analysis for decision tree classifier model")
 
+    with st.spinner("Calculating SHAP values..."):
+        # Initialize SHAP explainer for Logistic Regression
+        explainer = shap.TreeExplainer(dt_model, X_train_selected)
+        shap_values = explainer.shap_values(X_test_selected)
+        explanation = explainer(X_train_selected)
+
+        st.subheader("SHAP Beeswarm Plot")
+        st_shap(shap.plots.beeswarm(explanation))
+
+        st.subheader("Individual Prediction Explanation")
+        sample_idx = st.slider("Select a test sample to explain", 0, len(X_test_selected) - 1, 0)
+
+        st_shap(shap.force_plot(explainer.expected_value,
+                        shap_values[sample_idx, :],
+                        X_test_selected.iloc[sample_idx, :],
+                        show=False))
+
+        st.subheader("Feature Contribution Waterfall")
+        st_shap(shap.plots._waterfall.waterfall_legacy(explainer.expected_value,
+                                               shap_values[sample_idx, :],
+                                               X_test_selected.iloc[sample_idx, :],
+                                               show=False))
 # Conclusion Section
 elif selected == 'Conclusion':
     st.title("Conclusion")
