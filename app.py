@@ -13,11 +13,12 @@ import matplotlib.pyplot as plt
 
 from scipy import stats
 from sklearn.preprocessing import PowerTransformer
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.feature_selection import RFE
+from sklearn import tree
 from sklearn.metrics import (
     accuracy_score,
     confusion_matrix,
@@ -548,8 +549,9 @@ if selected == 'Data Preprocessing':
 
     # Leaking Variables Drop
     st.header("8. Dropping Leaking Variables")
-    st.markdown("""To ensure the model predicts **future risk** based on baseline characteristics, 
-    we must remove variables that represent events occurring *during* the study period
+    st.markdown("""
+    To ensure the model predicts **future risk** based on baseline characteristics, 
+    we must remove variables that represent events occurring *during* the study period.
     """)
     #Defining potential leakage columns
     target_col = "CVD"
@@ -816,12 +818,12 @@ elif selected == 'Exploratory Data Analysis':
         st.plotly_chart(fig_corr, width="stretch")
 
         st.subheader("Pairplot Analysis")
-        st.warning("Due to memory constraints, only Key Variables can be shown while in the deployed app.")
-        options = ["Pretty", "Resource-friendly"]
-        efficiency = st.segmented_control("How should the data be displayed?", options, selection_mode="single",
-                                        default="Resource-friendly")
-        if efficiency == "Pretty":
-            st.warning("Will take a long time to run if on own hardware, won't run on deployed app.")
+        st.info("Note: Due to memory constraints, only key variables are shown in the deployed application.")
+        options = ["Interactive (Plotly)", "Static (Seaborn)"]
+        efficiency = st.segmented_control("Select visualization style:", options, selection_mode="single",
+                                        default="Static (Seaborn)")
+        if efficiency == "Interactive (Plotly)":
+            st.warning("Interactive plots may take longer to render and may not work in the deployed application.")
             @st.cache_resource(show_spinner=True, show_time=True)
             def pairplots(available_vars):
                 fig = make_subplots(rows=len(available_vars), cols=len(available_vars),
@@ -1190,7 +1192,14 @@ elif selected == 'Machine Learning Results':
             st.metric("F1 Score", f"{f1_dt:.4f}",
                     delta = f"{f1_dt - f1_selected:.4f}")
 
-
+            # Cross-validation
+            st.subheader("Cross-Validation Results")
+            st.info("Note: Cross-validation is performed as additional validation to assess model stability across different data splits.")
+            with st.spinner("Running 5-fold cross-validation..."):
+                cv_scores = cross_val_score(dt_model, X_train_corrected, Y_train, cv=5, scoring='f1')
+                st.metric("Mean CV F1 Score", f"{cv_scores.mean():.4f}")
+                st.metric("CV F1 Std Dev", f"{cv_scores.std():.4f}")
+                st.info(f"CV F1 Scores: {[f'{score:.4f}' for score in cv_scores]}")
 
             # Feature importance
             feature_importance_dt = pd.DataFrame({
@@ -1217,6 +1226,26 @@ elif selected == 'Machine Learning Results':
                                  title='Confusion Matrix - Decision Tree',
                                  color_continuous_scale='Greens')
             st.plotly_chart(fig_cm_dt, width="stretch")
+        
+        # Tree Visualization
+        st.subheader("Decision Tree Visualization")
+        st.markdown("""
+        The decision tree structure shows how the model makes predictions through a series of 
+        binary decisions based on feature values. Each node shows the splitting criterion, 
+        and leaf nodes show the final classification.
+        """)
+        
+        with st.expander("View Decision Tree Structure (may be large)", expanded=False):
+            st.warning("Note: The tree visualization can be very large and may take time to render. It shows the complete decision path from root to all leaf nodes. For very deep trees, consider limiting max_depth during model training.")
+            
+            fig_tree, ax = plt.subplots(figsize=(50, 20))
+            tree.plot_tree(dt_model, ax=ax, impurity=False, 
+                          feature_names=X_train_corrected.columns, 
+                          class_names=['No CVD', 'CVD'], 
+                          proportion=True, rounded=True, 
+                          precision=2, filled=True, fontsize=8)
+            st.pyplot(fig_tree)
+            plt.close(fig_tree)
         
         # Random Forest with Hyperparameter Tuning
         st.header("3. Random Forest Classifier with Hyperparameter Tuning")
@@ -1313,6 +1342,15 @@ elif selected == 'Machine Learning Results':
                 st.metric("Recall", f"{recall_rf:.4f}", delta=f"{recall_rf - recall_selected:.4f}")
                 st.metric("Precision", f"{precision_rf:.4f}", delta=f"{precision_rf - precision_selected:.4f}")
 
+                # Cross-validation
+                st.subheader("Cross-Validation Results")
+                st.info("Note: Cross-validation is performed as additional validation to assess model stability across different data splits.")
+                with st.spinner("Running 5-fold cross-validation..."):
+                    cv_scores_rf = cross_val_score(rf_model, X_train_corrected, Y_train, cv=5, scoring='f1')
+                    st.metric("Mean CV F1 Score", f"{cv_scores_rf.mean():.4f}")
+                    st.metric("CV F1 Std Dev", f"{cv_scores_rf.std():.4f}")
+                    st.info(f"CV F1 Scores: {[f'{score:.4f}' for score in cv_scores_rf]}")
+
                 # Hyperparameters used
                 st.subheader("Hyperparameters Used")
                 st.code(f"""n_estimators: {n_estimators}
@@ -1392,7 +1430,8 @@ class_weight: {class_weight_rf}""")
     st.header("5. SHAP analysis for selected logistic regression model")
     st.markdown("""
     SHAP (SHapley Additive exPlanations) values explain how each feature contributes 
-    to individual predictions, helping us understand the model's decision-making process. This happens due to magic.
+    to individual predictions by computing the marginal contribution of each feature across all possible 
+    feature combinations, helping us understand the model's decision-making process.
     """)
 
     with st.spinner("Calculating SHAP values..."):
@@ -1415,14 +1454,14 @@ class_weight: {class_weight_rf}""")
     st.header("6. SHAP analysis for decision tree classifier model")
 
     with st.spinner("Calculating SHAP values..."):
-        # Initialize SHAP explainer for Logistic Regression
+        # Initialize SHAP explainer for Decision Tree
         explainer = shap.TreeExplainer(dt_model, X_train_selected)
 
         st.subheader("SHAP Beeswarm Plot")
         st_shap(shap.plots.beeswarm(explanation))
 
         st.subheader("Individual Prediction Explanation")
-        sample_idx = st.slider("Select a test sample to explain", 0, len(X_test_selected) - 1, 0, key="alkshfqklehfewklfh")
+        sample_idx = st.slider("Select a test sample to explain", 0, len(X_test_selected) - 1, 0, key="dt_shap_sample")
 
         st_shap(shap.force_plot(explainer.expected_value[0],
                         shap_values[sample_idx, :],
