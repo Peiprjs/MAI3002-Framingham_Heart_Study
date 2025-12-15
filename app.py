@@ -1474,7 +1474,7 @@ elif selected == 'Conclusion':
     
     st.markdown("""
     ## Conclusions
-    We therefore conclude this project is done and so are the authors.
+    We therefore conclude this project is done and so are we.
     """)
     
     st.info("Navigate through the different sections using the sidebar to explore detailed analysis and visualizations.")
