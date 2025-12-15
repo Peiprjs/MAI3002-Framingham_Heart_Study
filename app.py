@@ -467,16 +467,26 @@ if selected == 'Data Preprocessing':
     Skewness affects model performance. Features with |skewness| > 0.5 are transformed 
     using PowerTransformer (Yeo-Johnson method) to achieve more symmetric distributions.
     """)
-    
+
+    time_cols = [col for col in data_raw.columns if col.startswith('TIME')]
+    binary_cols = [col for col in data_raw.columns if 
+                   data_raw[col].dropna().isin([0, 1, 2, 3, 4]).all() and 
+                   len(data_raw[col].dropna().unique()) <= 4]
+    all_numeric = data_imputed.select_dtypes(include=['number']).columns.tolist()
+    continuous_cols = [c for c in all_numeric 
+                       if c not in time_cols 
+                       and c not in binary_cols 
+                       and c != 'RANDID']
+
     col1, col2 = st.columns(2)
     
     with col1:
         st.subheader("Before Preprocessing")
-        
+
         # Calculate skewness on raw data
-        numeric_data = data_raw.select_dtypes(include=['number'])
-        skewness_before = numeric_data.apply(lambda x: stats.skew(x.dropna())).sort_values(ascending=False)
-        
+        skew_data = data_raw[continuous_cols]
+        skewness_before = skew_data.apply(lambda x: stats.skew(x.dropna())).sort_values(ascending=False)
+
         skew_df_before = pd.DataFrame({
             'Feature': skewness_before.index,
             'Skewness': skewness_before.values
@@ -496,11 +506,11 @@ if selected == 'Data Preprocessing':
 
     with col2:
         st.subheader("After Preprocessing")
-        
+
         # Calculate skewness on imputed data
-        numeric_imputed = data_imputed.drop([col for col in data_imputed if col.startswith('TIME')], axis=1).select_dtypes(include=['number'])
+        numeric_imputed = data_imputed[continuous_cols].copy()
         imputed_vars = []
-        for column in numeric_imputed:
+        for column in numeric_imputed.columns:
             skewness = stats.skew(numeric_imputed[column])
             if abs(skewness) >= 0.5:
                 pt = PowerTransformer(method='yeo-johnson', standardize=True)
