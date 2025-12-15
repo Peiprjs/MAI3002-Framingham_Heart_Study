@@ -1052,29 +1052,37 @@ elif selected == 'Machine Learning Results':
         # Feature Selection with RFE
         st.subheader("Feature Selection with Recursive Feature Elimination (RFE)")
 
+        n_features_selector = st.slider(
+            "Select Number of Top Features to Keep",
+            min_value=5,
+            max_value=12,
+            value=10,
+            step=1,
+            help="Choose how many top predictors the RFE algorithm should select."
+        )
 
         @st.cache_resource(show_spinner=True, show_time=True)
-        def recursive_feature_elimination(X):
+        def recursive_feature_elimination(X, n_to_select):
             X_train_corrected = X
             # Generate seeds for robust feature selection
             rng = np.random.RandomState(seed=2025)
-            seeds = rng.randint(low=0, high=10000, size=7)
+            seeds = rng.randint(low=0, high=10000, size=12)
             
             votes = np.zeros(X_train_corrected.shape[1], dtype=int)
             
             for seed in seeds:
                 model = LogisticRegression(random_state=seed, max_iter=2000, solver='lbfgs')
-                rfe = RFE(estimator=model, n_features_to_select=10)
+                rfe = RFE(estimator=model, n_features_to_select=n_to_select)
                 rfe.fit(X_train_corrected, Y_train)
                 votes += rfe.support_.astype(int)
             
             # Select features that got at least one vote
-            mask = votes > 0
-            top_features = X_train_corrected.columns[mask].tolist()
-            return top_features
-        model = LogisticRegression()
-        top_features = recursive_feature_elimination(X_train_corrected)
-        st.info(f"Selected {len(top_features)} features: {', '.join(top_features[:10])}...")
+            vote_df = pd.DataFrame({'Feature': X_train_corrected.columns, 'Votes': votes})
+            top_features_list = vote_df.sort_values('Votes', ascending=False).head(n_to_select)['Feature'].tolist()
+            return top_features_list
+
+        top_features = recursive_feature_elimination(X_train_corrected, n_features_selector)
+        st.info(f"Selected {len(top_features)} features: {', '.join(top_features[:10])}.")
         
         # Train model with selected features
         st.subheader("Model with Selected Features")
