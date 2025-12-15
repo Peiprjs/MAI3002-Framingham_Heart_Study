@@ -99,7 +99,7 @@ if selected == 'Introduction':
     each year. Early detection and risk assessment are critical for prevention and intervention strategies. 
     The Framingham Heart Study, which began in 1948, has been instrumental in identifying major risk factors 
     for cardiovascular disease. This longitudinal study has collected extensive data on participants over 
-    multiple decades, providing valuable insights into the factors that contribute to heart disease.
+    multiple decades, which has proven useful for scientists to identify causes of cardiovascular disease.
     
     ### Research Question""")
     
