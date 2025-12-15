@@ -68,26 +68,16 @@ def preprocess_data(data):
                    'PREVMI', 'PREVSTRK', 'PREVHYP', 'ANYCHD', 'ANGINA', 
                    'HOSPMI', 'MI_FCHD', 'DEATH', 'STROKE', 'CVD', 'HYPERTEN']
     time_cols = [col for col in data.columns if col.startswith('TIME')]
-    
-    # Suppress imputation function output to avoid cluttering the UI
-    import sys
-    from io import StringIO
-    old_stdout = sys.stdout
-    sys.stdout = StringIO()
-    
-    try:
-        # Drop high missing columns
-        data_dropped = drop_high_missing_cols(data, threshold=0.50)
-        
-        # KNN imputation
-        data_knn = knn_impute(data_dropped, min_thresh=0.02, max_thresh=0.50, n_neighbors=5)
-        
-        # Simple imputation
-        data_imputed = impute_simple_central(data_knn)
-    finally:
-        # Restore stdout
-        sys.stdout = old_stdout
-    
+
+    # Drop high missing columns
+    data_dropped = drop_high_missing_cols(data, threshold=0.50)
+
+    # KNN imputation
+    data_knn = knn_impute(data_dropped, min_thresh=0.02, max_thresh=0.50, n_neighbors=5)
+
+    # Simple imputation
+    data_imputed = impute_simple_central(data_knn)
+
     return data_imputed, binary_cols, time_cols
 
 # Load data
@@ -98,27 +88,14 @@ data_imputed, binary_cols, time_cols = preprocess_data(data_raw)
 with st.sidebar:
     selected = option_menu(
         menu_title='Navigation',
-        options=['Abstract', 'Data Preprocessing', 'Exploratory Data Analysis', 'Statistical Analysis', 'Machine Learning Results', 'Conclusion'],
+        options=['Exploratory Data Analysis', 'Data Preprocessing', 'Statistical Analysis', 'Machine Learning Results', 'Conclusion'],
         menu_icon='heart-pulse',
-        icons=['bookmark-check', 'wrench', 'bar-chart', 'calculator', 'cpu', 'check2-circle'],
-        default_index=0,
+        icons=['bar-chart', 'wrench', 'calculator', 'cpu', 'check2-circle'],
+        default_index=4,
     )
 
-# Abstract Section
-if selected == 'Abstract':
-    st.title("Framingham Heart Study Analysis")
-    st.markdown("""
-    ## Abstract
-        
-    Navigate through the sections using the sidebar to explore the detailed analysis.
-    """.format(data_raw.shape[0], data_raw.shape[1]))
-    
-    # Display basic statistics
-    st.subheader("Dataset Preview")
-    st.dataframe(data_raw.head(10))
-
 # Data Preprocessing Section
-elif selected == 'Data Preprocessing':
+if selected == 'Data Preprocessing':
     st.title("Data Preprocessing")
     
     st.markdown("""
@@ -138,7 +115,8 @@ elif selected == 'Data Preprocessing':
     2. Learn imputation parameters from TRAINING set only
     3. Apply learned parameters to both train and test sets
     4. Transform features (skewness correction) on train, then test
-    5. Select features based on training set performance""", language="text")
+    5. Drop columns that (may) leak results
+    6. Select features based on training set performance""", language="text")
 
     # Missing Data Analysis
     st.header("1. Missing Data Analysis")
@@ -557,9 +535,12 @@ elif selected == 'Data Preprocessing':
     - Standardizes the transformed data
     - Reduces the impact of extreme values
     """)
+    st.header("8. Dropping leaking variables")
+    st.markdown("""text
     
+    """)
     # Feature Selection
-    st.header("8. Feature Selection Methods")
+    st.header("9. Feature Selection Methods")
     
     st.markdown("""
     Two complementary feature selection methods are employed in the machine learning pipeline:
