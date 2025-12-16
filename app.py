@@ -1264,6 +1264,19 @@ elif selected == 'Machine Learning Results':
                 st.metric("F1 Score", f"{f1_corr:.4f}",
                          delta=f"{f1_corr - f1_baseline:.4f}")
 
+            with col2:
+                # Confusion matrix
+                cm_corr = confusion_matrix(Y_test, y_pred_corr)
+                
+                fig_cm = px.imshow(cm_corr, 
+                                  text_auto=True,
+                                  labels=dict(x="Predicted", y="Actual"),
+                                  x=['No CVD', 'CVD'],
+                                  y=['No CVD', 'CVD'],
+                                  title='Confusion Matrix - Dropped Correlation',
+                                  color_continuous_scale='Blues')
+                st.plotly_chart(fig_cm, width="stretch")
+
         else:
             st.success("No features exceed the correlation threshold.")
         
