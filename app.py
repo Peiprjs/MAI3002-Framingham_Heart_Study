@@ -1227,7 +1227,7 @@ elif selected == 'Machine Learning Results':
                                        title='Confusion Matrix - Selected Features',
                                        color_continuous_scale='Blues')
             st.plotly_chart(fig_cm_selected, width="stretch")
-        st.header("2. Decision Tree Classifier")
+        
         # Correlation-based feature reduction
         st.subheader("Correlation-Based Feature Reduction")
         
@@ -1255,7 +1255,7 @@ elif selected == 'Machine Learning Results':
             st.success("No features exceed the correlation threshold.")
         
         # Decision Tree
-
+        st.header("2. Decision Tree Classifier")
         col1, col2 = st.columns(2)
         
         with col1:
