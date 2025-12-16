@@ -91,7 +91,7 @@ with st.sidebar:
 # Introduction Section
 if selected == 'Introduction':
     st.title("Predicting Cardiovascular Disease Risk: A Machine Learning Approach")
-    
+    [![DOI](https://zenodo.org/badge/1083256166.svg)](https://doi.org/10.5281/zenodo.17945400)
     st.markdown("""
     ### Background
     
