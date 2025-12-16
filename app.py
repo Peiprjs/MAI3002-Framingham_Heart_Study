@@ -1251,6 +1251,18 @@ elif selected == 'Machine Learning Results':
             f1_corr = f1_score(Y_test, y_pred_corr)
             accuracy_corr = accuracy_score(Y_test, y_pred_corr)
 
+            cm_selected = confusion_matrix(Y_test, y_pred_corr)
+            
+            fig_cm_selected = px.imshow(cm_selected, 
+                                       text_auto=True,
+                                       labels=dict(x="Predicted", y="Actual"),
+                                       x=['No CVD', 'CVD'],
+                                       y=['No CVD', 'CVD'],
+                                       title='Confusion Matrix - Dropped Correlation',
+                                       color_continuous_scale='Blues')
+            st.plotly_chart(fig_cm_selected, width="stretch")
+
+
         else:
             st.success("No features exceed the correlation threshold.")
         
