@@ -1109,7 +1109,7 @@ elif selected == 'Machine Learning Results':
         col1, col2 = st.columns(2)
         
         with col1:
-            lr_baseline = LogisticRegression(max_iter=2000, random_state=2025, solver='lbfgs')
+            lr_baseline = LogisticRegression(max_iter=2000, random_state=2025, solver='lbfgs', class_weight="balanced")
             lr_baseline.fit(X_train_corrected, Y_train)
             y_pred_baseline = lr_baseline.predict(X_test_corrected)
             
@@ -1154,7 +1154,7 @@ elif selected == 'Machine Learning Results':
             votes = np.zeros(X_train_corrected.shape[1], dtype=int)
             
             for seed in seeds:
-                model = LogisticRegression(random_state=seed, max_iter=2000, solver='lbfgs')
+                model = LogisticRegression(random_state=seed, max_iter=2000, solver='lbfgs', class_weight="balanced")
                 rfe = RFE(estimator=model, n_features_to_select=n_to_select)
                 rfe.fit(X_train_corrected, Y_train)
                 votes += rfe.support_.astype(int)
@@ -1176,7 +1176,7 @@ elif selected == 'Machine Learning Results':
         col1, col2 = st.columns(2)
         
         with col1:
-            lr_selected = LogisticRegression(max_iter=2000, random_state=2025, solver='lbfgs')
+            lr_selected = LogisticRegression(max_iter=2000, random_state=2025, solver='lbfgs', class_weight="balanced")
             lr_selected.fit(X_train_selected, Y_train)
             y_pred_selected = lr_selected.predict(X_test_selected)
             
@@ -1244,7 +1244,7 @@ elif selected == 'Machine Learning Results':
             X_train_corr_reduced = X_train_corrected[current_features]
             X_test_corr_reduced = X_test_corrected[current_features]
             
-            lr_corr = LogisticRegression(max_iter=2000, random_state=2025, solver='lbfgs')
+            lr_corr = LogisticRegression(max_iter=2000, random_state=2025, solver='lbfgs', class_weight="balanced")
             lr_corr.fit(X_train_corr_reduced, Y_train)
             y_pred_corr = lr_corr.predict(X_test_corr_reduced)
             
